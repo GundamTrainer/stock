@@ -7,6 +7,20 @@ const ARENA_CONFIG = {
   characterSpeed: 0.78,
 };
 
+const PUBLIC_SAMPLE_STOCK = {
+  code: "005930",
+  name: "삼성전자",
+  price: 73200,
+  change: 1500,
+  changeRate: 2.09,
+  open: 71300,
+  high: 73500,
+  low: 70900,
+  volume: 15400000,
+  tradingValue: 1124000000000,
+  updatedAt: "2026-06-21 15:30",
+};
+
 let arenaState = {
   lastSnapshot: null,
   direction: "flat",
@@ -19,6 +33,49 @@ let arenaState = {
 
 function onAuthReady() {
   initArenaPage();
+}
+
+async function fetchPublicMarketSnapshot(code) {
+  const apiKey = (window.PUBLIC_DATA_GO_KR_API_KEY || "").trim();
+
+  if (apiKey) {
+    try {
+      const url = new URL("https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo");
+      url.search = new URLSearchParams({
+        serviceKey: apiKey,
+        resultType: "json",
+        pageNo: "1",
+        numOfRows: "10",
+        ISU_CD: code,
+      }).toString();
+
+      const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error("public-data-status-" + response.status);
+
+      const payload = await response.json();
+      const items = payload?.response?.body?.items?.item || payload?.response?.body?.item || [];
+      const item = Array.isArray(items) ? items[0] : items;
+      if (item) {
+        return normalizeArenaSnapshot({
+          code: item.isinCd || item.shtCd || code,
+          name: item.itmsNm || item.stockName || "종목",
+          price: item.clpr || item.close || item.price || 0,
+          change: item.vs || item.change || 0,
+          changeRate: item.fltRt || item.changeRate || 0,
+          open: item.mkp || item.open || 0,
+          high: item.hipr || item.high || 0,
+          low: item.lopr || item.low || 0,
+          volume: item.acmlVol || item.volume || 0,
+          tradingValue: item.acmlTrPbmn || item.tradingValue || 0,
+          updatedAt: item.basDt || new Date().toLocaleString("ko-KR"),
+        });
+      }
+    } catch (error) {
+      console.warn("공공데이터 포털 연결 실패, 샘플 데이터를 사용합니다.", error);
+    }
+  }
+
+  return normalizeArenaSnapshot(PUBLIC_SAMPLE_STOCK);
 }
 
 function initArenaPage() {
@@ -55,16 +112,7 @@ async function loadArenaSnapshot(forceRefresh) {
   }
 
   try {
-    const response = await fetch("/api/stock-price?code=" + encodeURIComponent(ARENA_CONFIG.stockCode), {
-      cache: forceRefresh ? "no-store" : "no-cache",
-    });
-
-    if (!response.ok) {
-      throw new Error("MARKET_DATA_UNAVAILABLE");
-    }
-
-    const payload = await response.json();
-    const snapshot = normalizeArenaSnapshot(payload);
+    const snapshot = await fetchPublicMarketSnapshot(ARENA_CONFIG.stockCode);
     const previous = arenaState.lastSnapshot;
 
     arenaState.lastSnapshot = snapshot;
@@ -167,7 +215,7 @@ function renderErrorState() {
   ctx.fillText("데이터 연결 실패", 46, 120);
   ctx.font = "16px sans-serif";
   ctx.fillStyle = "#60656b";
-  ctx.fillText("KIS API 상태를 확인한 뒤 다시 시도해 주세요.", 46, 156);
+  ctx.fillText("공공데이터 연결 상태를 확인한 뒤 다시 시도해 주세요.", 46, 156);
 }
 
 function renderArenaFrame() {

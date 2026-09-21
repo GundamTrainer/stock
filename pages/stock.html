@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>종목 상세 | Stock Arena</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header id="nav"></header>
+
+  <main class="stock-page">
+    <section class="stock-header card">
+      <div>
+        <span class="kicker">STOCK DETAIL</span>
+        <h1 id="stockTitle">종목 정보</h1>
+      </div>
+      <div class="stock-price-box">
+        <strong id="stockCurrentPrice">-</strong>
+        <span id="stockChangeRate" class="change-tag">-</span>
+      </div>
+    </section>
+
+    <section class="stock-summary-grid card">
+      <article>
+        <span>기준</span>
+        <strong id="stockUpdatedAt">-</strong>
+      </article>
+      <article>
+        <span>시가</span>
+        <strong id="detail-open">-</strong>
+      </article>
+      <article>
+        <span>고가</span>
+        <strong id="detail-high">-</strong>
+      </article>
+      <article>
+        <span>저가</span>
+        <strong id="detail-low">-</strong>
+      </article>
+      <article>
+        <span>종가</span>
+        <strong id="detail-price">-</strong>
+      </article>
+      <article>
+        <span>거래량</span>
+        <strong id="detail-volume">-</strong>
+      </article>
+      <article>
+        <span>거래대금</span>
+        <strong id="detail-tradingValue">-</strong>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/static/js/public-data-config.js"></script>
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/stock.js"></script>
+</body>
+</html>
