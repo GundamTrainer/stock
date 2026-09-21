@@ -5,6 +5,8 @@ const RANKING_TARGETS = {
   value: "valueRanking",
 };
 
+const PORTFOLIO_STORAGE_KEY = "stock_arena_portfolio_v1";
+
 const PUBLIC_MARKET_ITEMS = [
   { code: "005930", name: "삼성전자", price: 73200, change: 1500, changeRate: 2.09, volume: 15400000, tradingValue: 1124000000000, tradeDate: "20260621" },
   { code: "000660", name: "SK하이닉스", price: 194500, change: -3200, changeRate: -1.62, volume: 8400000, tradingValue: 1630000000000, tradeDate: "20260621" },
@@ -22,11 +24,34 @@ const PUBLIC_MARKET_ITEMS = [
 
 let rankingCache = [];
 let marketCache = [];
+let selectedStock = null;
+
+function getPortfolioState() {
+  try {
+    const raw = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
+    if (!raw) {
+      return { cash: 10000000, holdings: {} };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      cash: Number(parsed.cash || 10000000),
+      holdings: parsed.holdings || {},
+    };
+  } catch (error) {
+    return { cash: 10000000, holdings: {} };
+  }
+}
+
+function savePortfolioState(state) {
+  localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(state));
+}
 
 function onAuthReady() {
   loadMarketSummary();
   loadAllRankings();
   bindSearch();
+  bindTradeControls();
+  renderPortfolioState();
 }
 
 function getPublicApiKey() {
@@ -112,6 +137,41 @@ function normalizePublicMarketItem(item) {
     tradeDate,
     updatedAt: tradeDate,
   };
+}
+
+function buildSyntheticTrend(basePrice, variation = 0.03) {
+  const points = [];
+  for (let i = 0; i < 20; i += 1) {
+    const wave = Math.sin(i / 2.7) * basePrice * variation;
+    const slope = (i - 9) * basePrice * 0.0012;
+    points.push(Math.round(basePrice + wave + slope + (Math.random() - 0.5) * basePrice * 0.008));
+  }
+  return points;
+}
+
+function getTrendPoints(stock) {
+  const base = Number(stock?.price || 0);
+  if (!base) return [0, 1, 2, 3, 4, 5];
+  return buildSyntheticTrend(base, stock.changeRate >= 0 ? 0.024 : 0.03);
+}
+
+function renderSparkline(stock, targetId, isPositive) {
+  const svg = document.getElementById(targetId);
+  if (!svg) return;
+
+  const values = getTrendPoints(stock);
+  const width = 300;
+  const height = 120;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const path = values.map(function (value, index) {
+    const x = (index / (values.length - 1)) * width;
+    const y = height - ((value - min) / range) * (height - 14) - 7;
+    return (index === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2);
+  }).join(" ");
+
+  svg.innerHTML = '<path d="' + path + '" fill="none" stroke="' + (isPositive ? "#1dd08f" : "#ff5d73") + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>';
 }
 
 async function loadPublicMarketData() {
@@ -202,19 +262,6 @@ async function loadMarketSummary() {
   }
 }
 
-function buildSummarySnapshot(items) {
-  const first = items[0] || {};
-  const snapshot = {
-    code: first.code || "005930",
-    name: first.name || "삼성전자",
-    price: Number(first.price || 70000),
-    change: Number(first.change || 0),
-    changeRate: Number(first.changeRate || 0),
-    updatedAt: first.updatedAt || new Date().toISOString().slice(0, 10),
-  };
-  return snapshot;
-}
-
 async function loadAllRankings() {
   const results = await Promise.allSettled(
     Object.keys(RANKING_TARGETS).map(function (type) {
@@ -227,6 +274,11 @@ async function loadAllRankings() {
       showError(RANKING_TARGETS[Object.keys(RANKING_TARGETS)[index]], "공공데이터 기반 시장 정보를 확인하지 못했습니다.");
     }
   });
+
+  const items = await loadPublicMarketData();
+  if (items.length && !selectedStock) {
+    setSelectedStock(items[0]);
+  }
 }
 
 async function loadRanking(type) {
@@ -284,8 +336,10 @@ function renderSummary(stock) {
     value: Number(stock.kosdaqValue || stock.price || 0),
     changeRate: Number(stock.kosdaqChangeRate || 0),
   };
+
   renderSummaryValue("kospi", kospiItem);
   renderSummaryValue("kosdaq", kosdaqItem);
+  renderPortfolioState();
 }
 
 function renderSummaryValue(prefix, item) {
@@ -300,17 +354,6 @@ function renderSummaryValue(prefix, item) {
   if (change) change.textContent = item.changeRate == null ? "-" : formatRate(item.changeRate);
 }
 
-function renderSummaryError() {
-  const status = document.getElementById("marketStatus");
-  const updated = document.getElementById("marketUpdated");
-  if (status) status.textContent = "시장 데이터 확인 불가";
-  if (updated) updated.textContent = "공공데이터 연결 상태를 확인하세요";
-  ["kospiChange", "kosdaqChange"].forEach(function (id) {
-    const element = document.getElementById(id);
-    if (element) element.textContent = "데이터 연결 오류";
-  });
-}
-
 function renderRanking(targetId, items) {
   const target = document.getElementById(targetId);
   if (!target) return;
@@ -321,9 +364,16 @@ function renderRanking(targetId, items) {
 
   target.innerHTML = "";
   items.slice(0, 10).forEach(function (item, index) {
-    const link = document.createElement("a");
+    const link = document.createElement("button");
+    link.type = "button";
     link.className = "ranking-item";
-    link.href = "/pages/stock.html?code=" + encodeURIComponent(item.code);
+    link.style.textAlign = "left";
+    link.style.width = "100%";
+    link.addEventListener("click", function () {
+      setSelectedStock(item);
+      const search = document.getElementById("stockSearch");
+      if (search) search.value = item.name;
+    });
 
     const rank = document.createElement("span");
     rank.className = "ranking-rank";
@@ -353,20 +403,161 @@ function bindSearch() {
   input.addEventListener("input", function () {
     const keyword = input.value.trim().toLowerCase();
     if (!keyword) {
-      status.textContent = "공공데이터 기반 종목을 검색할 수 있습니다.";
+      status.textContent = "시장 데이터에서 종목을 검색할 수 있습니다.";
       return;
     }
-    const matches = rankingCache.filter(function (item) {
+
+    const matches = (marketCache.length ? marketCache : rankingCache).filter(function (item) {
       return String(item.name || "").toLowerCase().includes(keyword) || String(item.code || "").includes(keyword);
     });
-    status.textContent = matches.length
-      ? matches.length + "개 종목이 시장 데이터에서 검색되었습니다."
-      : "검색 결과가 없습니다. 공공데이터 기반 데이터는 표시됩니다.";
+
+    if (matches.length) {
+      status.textContent = matches.length + "개 종목이 검색되었습니다.";
+      setSelectedStock(matches[0]);
+      return;
+    }
+
+    status.textContent = "검색 결과가 없습니다. 다른 종목 명칭을 입력해 보세요.";
   });
+}
+
+function setSelectedStock(item) {
+  if (!item) return;
+
+  selectedStock = {
+    ...item,
+    open: Number(item.price || 0) * (1 - (Number(item.changeRate || 0) / 100 || 0.015)),
+    high: Number(item.price || 0) * (1 + Math.abs(Number(item.changeRate || 0)) / 120),
+    low: Number(item.price || 0) * (1 - Math.abs(Number(item.changeRate || 0)) / 120),
+    volume: Number(item.volume || 0),
+    tradingValue: Number(item.tradingValue || 0),
+    updatedAt: item.updatedAt || new Date().toISOString().slice(0, 10),
+  };
+
+  const nameElement = document.getElementById("detailStockName");
+  const codeElement = document.getElementById("detailStockCode");
+  const priceElement = document.getElementById("detailPrice");
+  const rateElement = document.getElementById("detailRate");
+  const stockPriceInput = document.getElementById("tradePrice");
+  const detail1D = document.getElementById("detail1D");
+  const detail1W = document.getElementById("detail1W");
+  const detail1M = document.getElementById("detail1M");
+
+  if (nameElement) nameElement.textContent = selectedStock.name;
+  if (codeElement) codeElement.textContent = selectedStock.code;
+  if (priceElement) priceElement.textContent = formatPrice(selectedStock.price) + "원";
+  if (stockPriceInput) stockPriceInput.value = formatPrice(selectedStock.price);
+  if (rateElement) {
+    rateElement.textContent = formatRate(selectedStock.changeRate);
+    rateElement.className = "stock-detail-rate" + (selectedStock.changeRate >= 0 ? "" : " down");
+  }
+
+  if (detail1D) detail1D.textContent = formatRate(selectedStock.changeRate);
+  if (detail1W) detail1W.textContent = formatRate((selectedStock.changeRate || 0) * 4.1);
+  if (detail1M) detail1M.textContent = formatRate((selectedStock.changeRate || 0) * 8.7);
+
+  renderSparkline(selectedStock, "detailChart", Number(selectedStock.changeRate || 0) >= 0);
+  renderPortfolioState();
+  setTradeStatus("종목이 선택되었습니다. 매수/매도 수량을 입력하세요.");
+}
+
+function bindTradeControls() {
+  const buyBtn = document.getElementById("buyBtn");
+  const sellBtn = document.getElementById("sellBtn");
+
+  if (buyBtn) buyBtn.addEventListener("click", function () { executeTrade("buy"); });
+  if (sellBtn) sellBtn.addEventListener("click", function () { executeTrade("sell"); });
+}
+
+function renderPortfolioState() {
+  const balanceEl = document.getElementById("cashBalance");
+  const portfolioList = document.getElementById("portfolioList");
+  const portfolioValueEl = document.getElementById("portfolioValue");
+  const portfolioSummaryEl = document.getElementById("portfolioSummary");
+  const state = getPortfolioState();
+
+  if (balanceEl) balanceEl.textContent = formatWon(state.cash);
+
+  const holdings = Object.values(state.holdings || {});
+  let totalMarketValue = 0;
+  const rows = holdings.map(function (holding) {
+    const price = Number(holding.price || 0);
+    const value = price * Number(holding.qty || 0);
+    totalMarketValue += value;
+    return '<div class="holding-row"><div><strong>' + holding.name + '</strong><small>' + holding.qty + '주</small></div><div><strong>' + formatWon(value) + '</strong></div></div>';
+  }).join("");
+
+  if (portfolioList) {
+    portfolioList.innerHTML = rows || '<div class="holding-row"><div><strong>보유 종목 없음</strong></div></div>';
+  }
+
+  const totalAssets = state.cash + totalMarketValue;
+  if (portfolioValueEl) portfolioValueEl.textContent = formatWon(totalAssets);
+  if (portfolioSummaryEl) portfolioSummaryEl.textContent = holdings.length ? holdings.length + "개 종목 보유" : "보유 종목 없음";
+}
+
+function executeTrade(mode) {
+  if (!selectedStock) {
+    setTradeStatus("먼저 종목을 선택해 주세요.");
+    return;
+  }
+
+  const qty = Number(document.getElementById("tradeQty")?.value || 0);
+  const price = Number(selectedStock.price || 0);
+  if (!qty || qty <= 0) {
+    setTradeStatus("수량을 1 이상 입력해 주세요.");
+    return;
+  }
+
+  const state = getPortfolioState();
+
+  if (mode === "buy") {
+    const total = qty * price;
+    if (state.cash < total) {
+      setTradeStatus("현금이 부족합니다. 수량을 줄여 보세요.");
+      return;
+    }
+    const current = state.holdings[selectedStock.code] || { code: selectedStock.code, name: selectedStock.name, qty: 0, price: 0 };
+    current.qty += qty;
+    current.price = price;
+    state.holdings[selectedStock.code] = current;
+    state.cash -= total;
+    savePortfolioState(state);
+    renderPortfolioState();
+    setTradeStatus(selectedStock.name + "을(를) " + qty + "주 매수했습니다.");
+    return;
+  }
+
+  const current = state.holdings[selectedStock.code];
+  if (!current || current.qty < qty) {
+    setTradeStatus("보유 수량이 부족합니다.");
+    return;
+  }
+  current.qty -= qty;
+  state.cash += qty * price;
+
+  if (current.qty <= 0) {
+    delete state.holdings[selectedStock.code];
+  } else {
+    state.holdings[selectedStock.code] = current;
+  }
+
+  savePortfolioState(state);
+  renderPortfolioState();
+  setTradeStatus(selectedStock.name + "을(를) " + qty + "주 매도했습니다.");
+}
+
+function setTradeStatus(message) {
+  const element = document.getElementById("tradeStatus");
+  if (element) element.textContent = message;
 }
 
 function formatPrice(value) {
   return Number(value).toLocaleString("ko-KR");
+}
+
+function formatWon(value) {
+  return "₩" + Number(value).toLocaleString("ko-KR");
 }
 
 function formatVolume(value) {

@@ -17,6 +17,35 @@ function getPublicStockFallback(code) {
   }) || STOCK_SAMPLE_DATA[0];
 }
 
+function buildSparkline(values, isPositive) {
+  const width = 320;
+  const height = 110;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+
+  return values.map(function (value, index) {
+    const x = (index / (values.length - 1)) * width;
+    const y = height - ((value - min) / range) * (height - 10) - 4;
+    return (index === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2);
+  }).join(" ");
+}
+
+function renderStockChart(stock) {
+  const svg = document.getElementById("detailChart");
+  if (!svg) return;
+
+  const base = Number(stock.price || 0);
+  const values = [];
+  for (let i = 0; i < 24; i += 1) {
+    const wave = Math.sin(i / 2.3) * base * 0.02;
+    const slope = (i - 11) * base * 0.0009;
+    values.push(Math.round(base + wave + slope + (Math.random() - 0.5) * base * 0.008));
+  }
+
+  svg.innerHTML = '<path d="' + buildSparkline(values, Number(stock.changeRate || 0) >= 0) + '" fill="none" stroke="' + (Number(stock.changeRate || 0) >= 0 ? '#1dd08f' : '#ff5d73') + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>';
+}
+
 async function loadStockDetails() {
   const code = getStockCodeFromQuery();
   try {
@@ -100,6 +129,8 @@ function renderPriceDetail(stock) {
     const value = stock[key];
     element.textContent = value == null ? "-" : Number(value).toLocaleString("ko-KR");
   });
+
+  renderStockChart(stock);
 }
 
 window.addEventListener("DOMContentLoaded", function () {
