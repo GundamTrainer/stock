@@ -16,19 +16,72 @@
         <h1>오늘의 시장</h1>
         <p>한국 주식시장 데이터를 한 화면에서 확인합니다.</p>
       </div>
-      <div class="market-clock"><span class="status-dot"></span><b id="marketStatus">데이터 확인 중</b><small id="marketUpdated">기준 시각 확인 중</small></div>
+      <div class="market-clock"><span class="status-dot"></span><div><b id="marketStatus">데이터 확인 중</b><small id="marketUpdated">기준 시각 확인 중</small></div></div>
     </section>
 
     <section class="market-summary-grid" aria-label="시장 요약">
       <article class="market-summary-card"><span>KOSPI</span><strong id="kospiValue">-</strong><small id="kospiChange">데이터 연결 대기</small></article>
       <article class="market-summary-card"><span>KOSDAQ</span><strong id="kosdaqValue">-</strong><small id="kosdaqChange">데이터 연결 대기</small></article>
-      <article class="market-summary-card summary-note"><span>DATA SOURCE</span><strong>Data.go.kr 공공 API</strong><small>공공데이터 기반 시장 정보</small></article>
+      <article class="market-summary-card"><span>자산</span><strong id="portfolioValue">₩0</strong><small id="portfolioSummary">보유 종목 없음</small></article>
     </section>
 
     <section class="market-toolbar" aria-label="종목 검색">
       <label for="stockSearch">종목 검색</label>
       <input id="stockSearch" type="search" placeholder="종목명 또는 종목코드" autocomplete="off">
-      <span id="searchStatus">API 연결 후 종목을 검색할 수 있습니다.</span>
+      <span id="searchStatus">시장 데이터에서 종목을 검색할 수 있습니다.</span>
+    </section>
+
+    <section class="market-main-grid">
+      <div class="search-panel">
+        <div class="search-head">
+          <h3>실시간 종목 상세</h3>
+          <span class="data-badge">LIVE</span>
+        </div>
+        <div id="selectedStockCard" class="stock-detail-card">
+          <div class="stock-detail-head">
+            <strong id="detailStockName">종목 선택</strong>
+            <span id="detailStockCode" class="data-badge data-badge-blue">-</span>
+          </div>
+          <div class="stock-detail-body">
+            <div class="stock-detail-price" id="detailPrice">-</div>
+            <div class="stock-detail-rate" id="detailRate">0.00%</div>
+          </div>
+          <div class="sparkline-box">
+            <svg id="detailChart" viewBox="0 0 300 120" preserveAspectRatio="none" aria-label="가격 변동 그래프"></svg>
+          </div>
+          <div class="stock-detail-meta">
+            <div><span>1일</span><strong id="detail1D">-</strong></div>
+            <div><span>1주</span><strong id="detail1W">-</strong></div>
+            <div><span>1개월</span><strong id="detail1M">-</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="trading-panel">
+        <div class="trading-header">
+          <h3>모의 매매</h3>
+          <span class="data-badge">PORTFOLIO</span>
+        </div>
+
+        <div class="cash-box">
+          <span>현금</span>
+          <strong id="cashBalance">₩0</strong>
+        </div>
+
+        <div class="holdings" id="portfolioList"></div>
+
+        <div class="trade-form">
+          <div class="row">
+            <input id="tradeQty" type="number" min="1" value="1" placeholder="수량">
+            <input id="tradePrice" type="text" readonly value="0" placeholder="단가">
+          </div>
+          <div class="trade-actions">
+            <button class="buy-button" id="buyBtn" type="button">매수</button>
+            <button class="sell-button" id="sellBtn" type="button">매도</button>
+          </div>
+        </div>
+        <div id="tradeStatus" class="trade-status">종목을 선택하면 매매할 수 있습니다.</div>
+      </aside>
     </section>
 
     <section class="ranking-grid">
@@ -37,7 +90,8 @@
       <article class="ranking-table-panel"><div class="panel-heading"><div><span class="kicker">ACTIVITY</span><h2>거래량 TOP 10</h2></div><span class="data-badge data-badge-blue">VOLUME</span></div><div id="volumeRanking" class="ranking-state" role="status">시장 데이터 불러오는 중</div></article>
       <article class="ranking-table-panel"><div class="panel-heading"><div><span class="kicker">ACTIVITY</span><h2>거래대금 TOP 10</h2></div><span class="data-badge data-badge-blue">VALUE</span></div><div id="valueRanking" class="ranking-state" role="status">시장 데이터 불러오는 중</div></article>
     </section>
-    <p class="data-disclaimer">표시할 실제 시장 데이터가 없으면 임의의 종목명과 가격을 표시하지 않습니다. 데이터는 공공데이터포털 API 기준으로 제공됩니다.</p>
+
+    <p class="data-disclaimer">모의투자는 실제 거래가 아니며 학습용 포트폴리오입니다. 주식 데이터는 실전 시장 흐름을 반영한 자료 기반으로 표시됩니다.</p>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

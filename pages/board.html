@@ -12,19 +12,31 @@
 
   <header id="nav"></header>
 
-  <main>
-    <h1>게시판</h1>
-
-    <section class="card">
-      <textarea id="content" placeholder="한 줄 남기기"></textarea>
-      <div class="row">
-        <button onclick="addPost()">등록</button>
-        <button id="aiBtn" onclick="polish()">AI에게 다듬어달라기</button>
+  <main class="market-page">
+    <section class="board-shell">
+      <div class="board-header">
+        <div>
+          <span class="kicker">COMMUNITY</span>
+          <h3>종목토론</h3>
+        </div>
+        <span class="data-badge">DISCORD STYLE</span>
       </div>
-      <div id="aiBox"></div>
-    </section>
 
-    <ul id="list"></ul>
+      <div class="community-composer card">
+        <div class="composer-top">
+          <div class="avatar" id="composerAvatar">U</div>
+          <strong id="composerName">사용자</strong>
+        </div>
+        <textarea id="content" placeholder="오늘의 종목, 시장 흐름, 매수 타이밍에 대해 공유해 보세요."></textarea>
+        <div class="trade-actions" style="grid-template-columns: 1fr auto; margin-top: 12px;">
+          <button id="aiBtn" class="secondary" onclick="polish()">AI 문장 다듬기</button>
+          <button class="primary-button" onclick="addPost()">게시</button>
+        </div>
+        <div id="aiBox"></div>
+      </div>
+
+      <div id="list" class="community-list"></div>
+    </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
