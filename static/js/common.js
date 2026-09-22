@@ -54,9 +54,151 @@ function renderNav() {
       ' <button onclick="signOut()">로그아웃</button>'
     : '<a href="' + resolveSitePath("./index.html") + '">로그인</a>';
 
-  nav.innerHTML = '<div class="menu">' + links + "</div>" +
+  const brand =
+    '<a class="brand" href="' + resolveSitePath("./index.html") + '" aria-label="Stock Arena 홈">' +
+      '<span class="brand-mark" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M3 17l5-5 3 3 4-6 6 4"/><path d="M3 21h18"/>' +
+        '</svg>' +
+      '</span>' +
+      '<span><span class="brand-name">STOCK <span>ARENA</span></span>' +
+      '<span class="brand-sub">MARKET // TERMINAL</span></span>' +
+    '</a>';
+
+  nav.innerHTML = brand +
+                  '<div class="menu">' + links + "</div>" +
                   '<div class="me">' + me + "</div>";
 }
+
+// ---------------------------------------------------------
+// FX: animated cyberpunk background (grid + particles + data streams)
+// Injected once on every page. Respects prefers-reduced-motion.
+// ---------------------------------------------------------
+(function initArenaFX() {
+  function build() {
+    if (document.querySelector(".fx-root")) return;
+
+    var root = document.createElement("div");
+    root.className = "fx-root";
+    root.setAttribute("aria-hidden", "true");
+    root.innerHTML =
+      '<canvas class="fx-canvas"></canvas>' +
+      '<div class="fx-grid"></div>' +
+      '<div class="fx-scan"></div>' +
+      '<div class="fx-vignette"></div>';
+    document.body.insertBefore(root, document.body.firstChild);
+
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;
+
+    var canvas = root.querySelector(".fx-canvas");
+    var ctx = canvas.getContext("2d");
+    var w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var particles = [];
+    var streams = [];
+    var lines = [];
+    var COLORS = ["#00e5ff", "#2f7bff", "#a855f7", "#00ffa3"];
+
+    function rand(a, b) { return a + Math.random() * (b - a); }
+
+    function resize() {
+      w = canvas.clientWidth = window.innerWidth;
+      h = canvas.clientHeight = window.innerHeight;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      seed();
+    }
+
+    function seed() {
+      particles = [];
+      var count = Math.min(90, Math.floor((w * h) / 22000));
+      for (var i = 0; i < count; i++) {
+        particles.push({
+          x: rand(0, w), y: rand(0, h),
+          vx: rand(-0.25, 0.25), vy: rand(-0.35, -0.05),
+          r: rand(0.6, 2.1), a: rand(0.15, 0.7),
+          c: COLORS[Math.floor(Math.random() * COLORS.length)]
+        });
+      }
+      streams = [];
+      var scount = Math.max(6, Math.floor(w / 180));
+      for (var j = 0; j < scount; j++) {
+        streams.push({ x: rand(0, w), y: rand(-h, 0), len: rand(60, 180), speed: rand(1.2, 3.4), a: rand(0.05, 0.22) });
+      }
+      lines = [];
+      for (var k = 0; k < 3; k++) {
+        lines.push({ off: rand(0, 1000), amp: rand(24, 60), base: h * rand(0.35, 0.8), speed: rand(0.0006, 0.0016), c: COLORS[k % COLORS.length] });
+      }
+    }
+
+    var t = 0;
+    function frame() {
+      t += 1;
+      ctx.clearRect(0, 0, w, h);
+
+      // animated background chart lines
+      for (var li = 0; li < lines.length; li++) {
+        var ln = lines[li];
+        ctx.beginPath();
+        for (var x = 0; x <= w; x += 14) {
+          var y = ln.base
+            + Math.sin((x * 0.008) + ln.off + t * ln.speed * 60) * ln.amp
+            + Math.sin((x * 0.02) + t * ln.speed * 30) * (ln.amp * 0.4);
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = ln.c;
+        ctx.globalAlpha = 0.08;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // falling data streams
+      for (var si = 0; si < streams.length; si++) {
+        var s = streams[si];
+        var grad = ctx.createLinearGradient(s.x, s.y, s.x, s.y + s.len);
+        grad.addColorStop(0, "rgba(0,229,255,0)");
+        grad.addColorStop(1, "rgba(0,229,255," + s.a + ")");
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(s.x, s.y + s.len);
+        ctx.stroke();
+        s.y += s.speed;
+        if (s.y > h) { s.y = rand(-h, -20); s.x = rand(0, w); }
+      }
+
+      // glowing particles + connections
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i];
+        p.x += p.vx; p.y += p.vy;
+        if (p.y < -10) { p.y = h + 10; p.x = rand(0, w); }
+        if (p.x < -10) p.x = w + 10;
+        if (p.x > w + 10) p.x = -10;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.c;
+        ctx.globalAlpha = p.a;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener("resize", resize, { passive: true });
+    resize();
+    requestAnimationFrame(frame);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", build);
+  } else {
+    build();
+  }
+})();
 
 // ---------------------------------------------------------
 // 3. 로그인 / 회원가입
