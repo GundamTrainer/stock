@@ -14,6 +14,7 @@ const SUPABASE_KEY = "sb_publishable_A3QiVHthVM25z1lfpAqvVg_Q6aWV6vV";
 // (*참고 : CDN이 supabase 라는 이름을 이미 쓰고 있으믐로 우리가 만드는 것은 db 라고 부를 예정)
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+window.db = db;
 
 // 지금 로그인한 사람 (로그인 안 했으면 null)
 let currentUser = null;
@@ -25,6 +26,7 @@ let currentUser = null;
 const MENU = [
 { name: "홈", url: "./index.html" },
 { name: "오늘의 시장", url: "./pages/market.html" },
+{ name: "전체 종목", url: "./pages/stocks.html" },
 { name: "종목 토론", url: "./pages/board.html" },
 { name: "내 정보", url: "./pages/mypage.html" },
 ];

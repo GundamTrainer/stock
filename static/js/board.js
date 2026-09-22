@@ -28,6 +28,20 @@ function setComposerIdentity() {
 function onAuthReady() {
   setComposerIdentity();
   loadPosts();
+  renderNews();
+}
+
+function renderNews() {
+  const target = document.getElementById("newsList");
+  if (!target) return;
+  const news = [
+    { source: "시장 브리핑", title: "반도체·플랫폼 종목의 장중 변동성 확대", note: "실시간 뉴스 API 연결 전 샘플 카드입니다." },
+    { source: "기업 공시", title: "바이오 업종은 임상·허가 일정 확인이 필요합니다", note: "종목별 공시 원문을 연결할 수 있습니다." },
+    { source: "글로벌 시장", title: "오늘의 환율과 금리 흐름이 수출주에 영향을 줄 수 있습니다", note: "뉴스 발행 시각과 출처를 함께 표시할 예정입니다." },
+  ];
+  target.innerHTML = news.map(function (item) {
+    return '<article class="news-card"><span>' + item.source + '</span><h3>' + item.title + '</h3><p>' + item.note + '</p></article>';
+  }).join("");
 }
 
 async function loadPosts() {
@@ -70,7 +84,7 @@ function renderPosts(items) {
     const isMine = currentUser && post.user_id === currentUser.id;
     const deleteBtn = isMine ? '<button type="button" onclick="deletePost(' + (post.id || 0) + ')">삭제</button>' : "";
 
-    return '<article class="community-post"><div class="post-head"><div class="post-user"><div class="avatar">' + (userName.slice(0, 1) || "U").toUpperCase() + '</div><strong>' + userName + '</strong></div><span class="post-time">' + new Date(createdAt).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + '</span></div><div class="post-content">' + escapeHtml(content) + '</div><div class="post-actions"><span>반응 0</span><span>공유 0</span>' + deleteBtn + '</div></article>';
+    return '<article class="community-post"><div class="post-head"><div class="post-user"><div class="avatar">' + escapeHtml((userName.slice(0, 1) || "U").toUpperCase()) + '</div><strong>' + escapeHtml(userName) + '</strong></div><span class="post-time">' + new Date(createdAt).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + '</span></div><div class="post-content">' + escapeHtml(content) + '</div><div class="post-actions"><span>반응 0</span><span>공유 0</span>' + deleteBtn + '</div></article>';
   }).join("");
 }
 

@@ -6,20 +6,21 @@ const RANKING_TARGETS = {
 };
 
 const PORTFOLIO_STORAGE_KEY = "stock_arena_portfolio_v1";
+const TRADE_HISTORY_STORAGE_KEY = "stock_arena_trade_history_v1";
 
 const PUBLIC_MARKET_ITEMS = [
-  { code: "005930", name: "삼성전자", price: 73200, change: 1500, changeRate: 2.09, volume: 15400000, tradingValue: 1124000000000, tradeDate: "20260621" },
-  { code: "000660", name: "SK하이닉스", price: 194500, change: -3200, changeRate: -1.62, volume: 8400000, tradingValue: 1630000000000, tradeDate: "20260621" },
-  { code: "035420", name: "NAVER", price: 251500, change: 4800, changeRate: 1.95, volume: 2700000, tradingValue: 678000000000, tradeDate: "20260621" },
-  { code: "051910", name: "LG화학", price: 578000, change: 9300, changeRate: 1.64, volume: 750000, tradingValue: 432000000000, tradeDate: "20260621" },
-  { code: "207940", name: "삼성바이오로직스", price: 795000, change: -11000, changeRate: -1.36, volume: 620000, tradingValue: 492000000000, tradeDate: "20260621" },
-  { code: "068270", name: "셀트리온", price: 176500, change: 2300, changeRate: 1.32, volume: 4600000, tradingValue: 812000000000, tradeDate: "20260621" },
-  { code: "035720", name: "카카오", price: 56800, change: 1200, changeRate: 2.16, volume: 13200000, tradingValue: 749000000000, tradeDate: "20260621" },
-  { code: "012330", name: "현대모비스", price: 255500, change: 3400, changeRate: 1.35, volume: 2500000, tradingValue: 639000000000, tradeDate: "20260621" },
-  { code: "033780", name: "KT&G", price: 102800, change: -1200, changeRate: -1.15, volume: 3900000, tradingValue: 401000000000, tradeDate: "20260621" },
-  { code: "090430", name: "아모레퍼시픽", price: 171200, change: 2600, changeRate: 1.54, volume: 2400000, tradingValue: 410000000000, tradeDate: "20260621" },
-  { code: "066570", name: "LG전자", price: 120500, change: -900, changeRate: -0.74, volume: 5400000, tradingValue: 651000000000, tradeDate: "20260621" },
-  { code: "055550", name: "신한지주", price: 45200, change: 580, changeRate: 1.30, volume: 8100000, tradingValue: 366000000000, tradeDate: "20260621" },
+  { code: "005930", name: "삼성전자", sector: "디스플레이", price: 73200, change: 1500, changeRate: 2.09, volume: 15400000, tradingValue: 1124000000000, tradeDate: "20260621" },
+  { code: "000660", name: "SK하이닉스", sector: "디스플레이", price: 194500, change: -3200, changeRate: -1.62, volume: 8400000, tradingValue: 1630000000000, tradeDate: "20260621" },
+  { code: "035420", name: "NAVER", sector: "출판·플랫폼", price: 251500, change: 4800, changeRate: 1.95, volume: 2700000, tradingValue: 678000000000, tradeDate: "20260621" },
+  { code: "051910", name: "LG화학", sector: "화학", price: 578000, change: 9300, changeRate: 1.64, volume: 750000, tradingValue: 432000000000, tradeDate: "20260621" },
+  { code: "207940", name: "삼성바이오로직스", sector: "생명과학", price: 795000, change: -11000, changeRate: -1.36, volume: 620000, tradingValue: 492000000000, tradeDate: "20260621" },
+  { code: "068270", name: "셀트리온", sector: "생명과학", price: 176500, change: 2300, changeRate: 1.32, volume: 4600000, tradingValue: 812000000000, tradeDate: "20260621" },
+  { code: "035720", name: "카카오", sector: "게임·콘텐츠", price: 56800, change: 1200, changeRate: 2.16, volume: 13200000, tradingValue: 749000000000, tradeDate: "20260621" },
+  { code: "012330", name: "현대모비스", sector: "자동차", price: 255500, change: 3400, changeRate: 1.35, volume: 2500000, tradingValue: 639000000000, tradeDate: "20260621" },
+  { code: "033780", name: "KT&G", sector: "소비재", price: 102800, change: -1200, changeRate: -1.15, volume: 3900000, tradingValue: 401000000000, tradeDate: "20260621" },
+  { code: "090430", name: "아모레퍼시픽", sector: "소비재", price: 171200, change: 2600, changeRate: 1.54, volume: 2400000, tradingValue: 410000000000, tradeDate: "20260621" },
+  { code: "066570", name: "LG전자", sector: "전자·가전", price: 120500, change: -900, changeRate: -0.74, volume: 5400000, tradingValue: 651000000000, tradeDate: "20260621" },
+  { code: "055550", name: "신한지주", sector: "금융", price: 45200, change: 580, changeRate: 1.30, volume: 8100000, tradingValue: 366000000000, tradeDate: "20260621" },
 ];
 
 let rankingCache = [];
@@ -44,6 +45,13 @@ function getPortfolioState() {
 
 function savePortfolioState(state) {
   localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(state));
+}
+
+function saveTradeHistory(mode, stock, qty, total) {
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem(TRADE_HISTORY_STORAGE_KEY) || "[]"); } catch (error) { history = []; }
+  history.push({ mode, code: stock.code, name: stock.name, qty, total, createdAt: new Date().toISOString() });
+  localStorage.setItem(TRADE_HISTORY_STORAGE_KEY, JSON.stringify(history.slice(-200)));
 }
 
 function onAuthReady() {
@@ -129,6 +137,7 @@ function normalizePublicMarketItem(item) {
   return {
     code: String(code),
     name: String(name),
+    sector: String(item.sector || item.category || "시장"),
     price: Number.isFinite(price) ? price : 0,
     change: Number.isFinite(change) ? change : 0,
     changeRate: Number.isFinite(changeRate) ? changeRate : 0,
@@ -312,6 +321,7 @@ function buildRankings(items, type) {
       rank: index + 1,
       code: item.code,
       name: item.name,
+      sector: item.sector,
       price: item.price,
       change: item.change,
       changeRate: item.changeRate,
@@ -404,20 +414,51 @@ function bindSearch() {
     const keyword = input.value.trim().toLowerCase();
     if (!keyword) {
       status.textContent = "시장 데이터에서 종목을 검색할 수 있습니다.";
+      renderSearchResults([]);
       return;
     }
 
     const matches = (marketCache.length ? marketCache : rankingCache).filter(function (item) {
-      return String(item.name || "").toLowerCase().includes(keyword) || String(item.code || "").includes(keyword);
+      const name = String(item.name || "").toLowerCase();
+      const sector = String(item.sector || "").toLowerCase();
+      return name.includes(keyword) || sector.includes(keyword) || String(item.code || "").includes(keyword) || getKoreanInitials(name).includes(keyword);
     });
 
     if (matches.length) {
       status.textContent = matches.length + "개 종목이 검색되었습니다.";
-      setSelectedStock(matches[0]);
+      renderSearchResults(matches.slice(0, 8));
       return;
     }
 
     status.textContent = "검색 결과가 없습니다. 다른 종목 명칭을 입력해 보세요.";
+    renderSearchResults([]);
+  });
+}
+
+function getKoreanInitials(value) {
+  const initials = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
+  return String(value).split("").map(function (char) {
+    const code = char.charCodeAt(0) - 44032;
+    return code >= 0 && code <= 11171 ? initials[Math.floor(code / 588)] : char;
+  }).join("");
+}
+
+function renderSearchResults(items) {
+  const target = document.getElementById("searchResults");
+  if (!target) return;
+  target.innerHTML = "";
+  items.forEach(function (item) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "search-result-item";
+    button.innerHTML = "<span><strong>" + item.name + "</strong><small>" + (item.code || "") + " · " + (item.sector || "시장") + "</small></span><b class=\"" + getChangeClass(item.changeRate) + "\">" + formatRate(item.changeRate) + "</b>";
+    button.addEventListener("click", function () {
+      setSelectedStock(item);
+      const input = document.getElementById("stockSearch");
+      if (input) input.value = item.name;
+      target.innerHTML = "";
+    });
+    target.appendChild(button);
   });
 }
 
@@ -445,6 +486,8 @@ function setSelectedStock(item) {
 
   if (nameElement) nameElement.textContent = selectedStock.name;
   if (codeElement) codeElement.textContent = selectedStock.code;
+  const sectorElement = document.getElementById("detailSector");
+  if (sectorElement) sectorElement.textContent = selectedStock.sector || "시장 분류 확인 중";
   if (priceElement) priceElement.textContent = formatPrice(selectedStock.price) + "원";
   if (stockPriceInput) stockPriceInput.value = formatPrice(selectedStock.price);
   if (rateElement) {
@@ -492,6 +535,14 @@ function renderPortfolioState() {
   }
 
   const totalAssets = state.cash + totalMarketValue;
+  const invested = Object.values(state.holdings || {}).reduce(function (sum, holding) {
+    return sum + Number(holding.price || 0) * Number(holding.qty || 0);
+  }, 0);
+  const estimatedProfit = totalMarketValue - invested;
+  const profitTodayEl = document.getElementById("profitToday");
+  const lossTodayEl = document.getElementById("lossToday");
+  if (profitTodayEl) profitTodayEl.textContent = formatWon(Math.max(estimatedProfit, 0));
+  if (lossTodayEl) lossTodayEl.textContent = formatWon(Math.abs(Math.min(estimatedProfit, 0)));
   if (portfolioValueEl) portfolioValueEl.textContent = formatWon(totalAssets);
   if (portfolioSummaryEl) portfolioSummaryEl.textContent = holdings.length ? holdings.length + "개 종목 보유" : "보유 종목 없음";
 }
@@ -522,6 +573,7 @@ function executeTrade(mode) {
     current.price = price;
     state.holdings[selectedStock.code] = current;
     state.cash -= total;
+    saveTradeHistory(mode, selectedStock, qty, total);
     savePortfolioState(state);
     renderPortfolioState();
     setTradeStatus(selectedStock.name + "을(를) " + qty + "주 매수했습니다.");
@@ -535,6 +587,7 @@ function executeTrade(mode) {
   }
   current.qty -= qty;
   state.cash += qty * price;
+  saveTradeHistory(mode, selectedStock, qty, qty * price);
 
   if (current.qty <= 0) {
     delete state.holdings[selectedStock.code];

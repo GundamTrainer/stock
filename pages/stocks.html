@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>전체 종목 | Stock Arena</title>
+  <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+  <header id="nav"></header>
+  <main class="stocks-page">
+    <section class="page-heading">
+      <div><span class="kicker">UNIVERSE EXPLORER</span><h1>전체 종목</h1><p>업종을 선택하거나 이름, 코드로 원하는 종목을 찾아보세요.</p></div>
+      <a class="btn" href="./market.html">시장 화면으로</a>
+    </section>
+    <section class="catalog-toolbar">
+      <label for="catalogSearch">종목 찾기</label>
+      <input id="catalogSearch" type="search" placeholder="삼성, 화학, 005930" autocomplete="off">
+      <span id="catalogCount"></span>
+    </section>
+    <nav id="catalogTabs" class="sector-tabs" aria-label="업종 필터"></nav>
+    <section id="catalogGrid" class="stock-catalog-grid" aria-live="polite"></section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../static/js/public-data-config.js"></script>
+  <script src="../static/js/common.js"></script>
+  <script src="../static/js/market.js"></script>
+  <script src="../static/js/stocks.js"></script>
+</body>
+</html>
