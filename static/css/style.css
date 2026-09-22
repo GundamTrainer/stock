@@ -755,7 +755,7 @@ textarea { min-height: 100px; resize: vertical; }
 .board-header {
   display: flex;
   align-items: center;
-  justify-content: between;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -941,12 +941,11 @@ textarea { min-height: 100px; resize: vertical; }
 
 #list { list-style: none; margin: 0; padding: 0; }
 
-    flex-wrap: wrap;
-  }
-
-  .arena-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }
-
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

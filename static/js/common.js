@@ -23,27 +23,36 @@ let currentUser = null;
 // ---------------------------------------------------------
 
 const MENU = [
-{ name: "홈", url: "/index.html" },
-{ name: "오늘의 시장", url: "/pages/market.html" },
-{ name: "종목 토론", url: "/pages/board.html" },
-{ name: "내 정보", url: "/pages/mypage.html" },
+{ name: "홈", url: "./index.html" },
+{ name: "오늘의 시장", url: "./pages/market.html" },
+{ name: "종목 토론", url: "./pages/board.html" },
+{ name: "내 정보", url: "./pages/mypage.html" },
 ];
+
+function resolveSitePath(targetPath) {
+  const currentPath = (location.pathname || "/").replace(/\\/g, "/");
+  const isNested = currentPath.includes("/pages/");
+  const cleanTarget = String(targetPath).replace(/^\/+/, "");
+  return isNested ? "../" + cleanTarget : "./" + cleanTarget;
+}
 
 function renderNav() {
   const nav = document.getElementById("nav");
   if (!nav) return;
 
-  const here = location.pathname;
+  const here = (location.pathname || "/").replace(/\\/g, "/");
 
   const links = MENU.map(function (m) {
-    const isHere = here === m.url || (m.url === "/index.html" && here === "/");
-    return '<a href="' + m.url + '"' + (isHere ? ' class="on"' : "") + ">" + m.name + "</a>";
+    const href = resolveSitePath(m.url);
+    const expected = m.url.replace(/^\.\//, "/");
+    const isHere = here === expected || here.endsWith(expected);
+    return '<a href="' + href + '"' + (isHere ? ' class="on"' : "") + ">" + m.name + "</a>";
   }).join("");
 
   const me = currentUser
     ? "<span>" + currentUser.email + "</span>" +
       ' <button onclick="signOut()">로그아웃</button>'
-    : '<a href="/index.html">로그인</a>';
+    : '<a href="' + resolveSitePath("./index.html") + '">로그인</a>';
 
   nav.innerHTML = '<div class="menu">' + links + "</div>" +
                   '<div class="me">' + me + "</div>";
@@ -81,7 +90,7 @@ async function signIn() {
 
 async function signOut() {
   await db.auth.signOut();
-  location.href = "/index.html";
+  location.href = resolveSitePath("./index.html");
 }
 
 // ---------------------------------------------------------
@@ -111,7 +120,7 @@ db.auth.onAuthStateChange(function (event, session) {
 
     // <body data-require-auth="true"> 인 페이지는 로그인 안 하면 홈으로 보냅니다.
     if (!currentUser && document.body.dataset.requireAuth === "true") {
-      location.href = "/index.html";
+      location.href = resolveSitePath("./index.html");
       return;
     }
 
