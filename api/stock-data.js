@@ -67,7 +67,10 @@ export function extractItemsFromPayload(payload) {
 }
 
 export function normalizePublicStockItem(item, fallbackCode) {
-  const code = pickFirst(item, ["isinCd", "shtCd", "stkCd", "stockCode", "code", "ISU_CD", "STK_CD"]) || fallbackCode || "";
+  let code = pickFirst(item, ["srtnCd", "shtCd", "stkCd", "stockCode", "code", "ISU_CD", "STK_CD", "isinCd"]) || fallbackCode || "";
+  if (/^KR\d{10}$/.test(String(code))) {
+    code = String(code).slice(3, 9);
+  }
   const name = pickFirst(item, ["itmsNm", "isnm", "stockName", "stockNm", "name", "korIsnm", "nm"]) || "";
   const tradeDate = pickFirst(item, ["basDt", "stdDt", "tradeDate", "date", "trdDt"]) || "";
   const price = parseNumber(pickFirst(item, ["clpr", "close", "lastPrice", "stck_prpr", "price", "curPrice", "mkp"]));
@@ -118,9 +121,13 @@ export async function fetchPublicStockData(options = {}) {
   const period = options.period || "";
   const tradeDate = options.tradeDate || "";
 
-  const apiKey = process.env.DATA_GO_KR_API_KEY;
-  if (!apiKey) {
+  const rawApiKey = process.env.DATA_GO_KR_API_KEY;
+  if (!rawApiKey) {
     throw new PublicDataError("DATA_GO_KR_API_KEY 환경변수가 없습니다.", 500, "DATA_GO_KR_API_KEY_MISSING");
+  }
+  let apiKey = String(rawApiKey).trim().replace(/^['"]|['"]$/g, "");
+  if (/%[0-9a-f]{2}/i.test(apiKey)) {
+    try { apiKey = decodeURIComponent(apiKey); } catch (error) { /* Keep the provided key if it is not valid percent encoding. */ }
   }
 
   const baseUrl = getBaseUrl();

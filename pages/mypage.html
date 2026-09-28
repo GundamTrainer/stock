@@ -19,9 +19,15 @@
     </section>
 
     <section class="rank-panel">
-      <div class="rank-badge" id="rankBadge">BRONZE</div>
+      <div class="rank-badge rank-bronze" id="rankBadge" aria-label="브론즈 등급"><svg viewBox="0 0 100 112" aria-hidden="true"><path class="crest-outer" d="M50 4 91 19v31c0 26-16 44-41 57C25 94 9 76 9 50V19z"/><path class="crest-inner" d="M50 15 81 26v24c0 19-11 33-31 44-20-11-31-25-31-44V26z"/><path class="crest-mark" d="m31 56 13 13 26-29"/></svg><span>BRONZE</span></div>
       <div class="rank-copy"><span class="kicker">TRADING CAREER</span><h2 id="rankTitle">브론즈 투자자</h2><p id="rankDescription">첫 번째 투자 기록을 쌓아보세요.</p><div class="rank-progress"><span id="rankProgressBar"></span></div><small id="rankNext">다음 등급까지 ₩1,000,000</small></div>
       <div class="rank-stats"><div><span>누적 매수</span><strong id="totalBought">₩0</strong></div><div><span>누적 매도</span><strong id="totalSold">₩0</strong></div><div><span>수익</span><strong id="totalProfit">₩0</strong></div></div>
+    </section>
+
+    <section class="trading-history-panel">
+      <div class="history-heading"><div><span class="kicker">PAPER TRADING JOURNAL</span><h2>매매 성과와 기록</h2></div><span id="tradeRecordCount">0건</span></div>
+      <div class="history-chart-wrap"><div><strong>누적 실현손익</strong><small>매도 시 확정된 손익 기준</small></div><svg id="tradingHistoryChart" viewBox="0 0 900 220" preserveAspectRatio="none" role="img" aria-label="매도 실현손익 누적 그래프"></svg><p id="historyChartEmpty">매매 기록이 쌓이면 누적 손익 추이를 표시합니다.</p></div>
+      <div class="trade-records-wrap"><table class="trade-records"><thead><tr><th>거래 시각</th><th>구분</th><th>종목</th><th>수량</th><th>체결가</th><th>거래 금액</th><th>실현손익</th></tr></thead><tbody id="tradeRecords"><tr><td colspan="7">거래 기록을 불러오는 중입니다.</td></tr></tbody></table></div>
     </section>
 
     <h2>내가 쓴 글</h2>

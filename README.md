@@ -35,8 +35,8 @@ my-project/
 |---|---|---|
 | `index.html`, `assets/` | **전 세계** | Supabase Publishable key |
 | GitHub 저장소 | 저장소를 볼 수 있는 사람 | 코드만. 키는 없음 |
-| `.env.local` (내 컴퓨터) | 나만 | Groq 키 |
-| Vercel 환경변수 | 나만 | Groq 키 (같은 값) |
+| `.env.local` (내 컴퓨터) | 나만 | `GROQ_API_KEY`, `DATA_GO_KR_API_KEY` |
+| Vercel 환경변수 | 나만 | 위 서버 키와 같은 값 |
 
 `.env.local` 은 깃에 안 올라가므로 **Vercel에는 따로 등록해야 합니다.**
 Settings → Environment Variables 에 넣고 **Redeploy** 까지 해야 반영됩니다.
@@ -47,19 +47,33 @@ Settings → Environment Variables 에 넣고 **Redeploy** 까지 해야 반영�
 브라우저에서 직접 `index.html` 을 열면 `/api/stock-price`, `/api/stock-rankings` 같은 서버 엔드포인트가 존재하지 않아
 "시장 데이터를 확인하지 못했습니다" 상태가 계속 뜹니다.
 
-아래 명령으로 서버를 실행해야 합니다:
+이 작업공간에는 Node.js/Vercel CLI가 설치되어 있지 않아, 기본 테스트 서버로는 `/api` 호출이 404가 됩니다. Python 로컬 API 서버를 실행할 수 있습니다:
 
 ```bash
-cd "C:/Users/USER/Desktop/GundTR/Web_Example"
-vercel dev
+cd "C:/Users/USER/Desktop/GundamTrainer/stock"
+py dev_server.py
 ```
 
-또는 배포 환경에서 Vercel에 올려야 `/api` 경로가 정상 작동합니다.
+그 다음 `http://127.0.0.1:8001`을 엽니다. 서버는 루트 `.env.local`의 Groq·금융위 API 키를 읽고, 환경 파일 URL은 외부에 제공하지 않습니다. 키가 읽혔는지는 `/api/health`에서 값이 아닌 설정 여부만 확인할 수 있습니다.
+
+운영과 동일한 Vercel Function 실행을 원하면 Node.js와 Vercel CLI를 설치한 뒤 `vercel dev`를 사용할 수 있습니다. 배포 환경에서는 Vercel에 API 키를 별도로 등록해야 합니다.
 
 > 참고: `python -m http.server` 는 정적 페이지만 제공하므로 API 호출은 동작하지 않습니다.
 
 Supabase 키를 안 숨기는 건 실수가 아닙니다. 공개를 전제로 만들어진 키이고,
 권한은 DB의 RLS 정책이 따로 막습니다.
+
+## 모의 매매 데이터 설정
+
+매수·매도 내역과 잔액은 로그인 계정별 Supabase 테이블에 저장됩니다. 한 번만 설정하면 됩니다:
+
+1. Supabase 대시보드에서 **SQL Editor**를 엽니다.
+2. 이 저장소의 [supabase/stock-arena-trading.sql](supabase/stock-arena-trading.sql) 전체 내용을 실행합니다.
+3. 로그인 상태에서 오늘의 시장 페이지에서 거래합니다. 잔액·보유 종목·거래 기록은 RPC 트랜잭션으로 원자적으로 저장됩니다.
+
+화면에 `거래 RPC가 없습니다`가 나오면 SQL이 아직 실행되지 않았거나 함수 스키마 캐시가 갱신되지 않은 것입니다. `permission denied`는 SQL의 권한/RLS 적용을 확인하고, 로그인 오류는 다시 로그인합니다.
+
+새 거래부터 Supabase에 저장됩니다. 이전 버전에서 브라우저 `localStorage`에만 저장한 매매 기록은 계정 데이터로 자동 이전되지 않습니다.
 
 ## 규칙 1 — 주소는 항상 `/` 로 시작
 
@@ -161,6 +175,7 @@ async function onAuthReady() {
 | 새 페이지가 메뉴에 안 보임 | `common.js` 의 `MENU` 에 안 넣음 |
 | 커밋했는데 화면이 그대로 | 브라우저 캐시. `Ctrl+Shift+R` |
 | AI만 404 | Live Server로 열었음. 배포 주소나 `vercel dev` 에서 확인 |
+| 금융위 시세 API 403 | data.go.kr에서 금융위원회 주식시세정보 API 활용 신청 승인 상태와 `.env.local`의 `DATA_GO_KR_API_KEY` 값을 확인 |
 
 > **참고:** Git은 빈 폴더를 저장하지 않습니다.
 > `assets/img/` 에 파일이 하나도 없으면 GitHub에 폴더가 안 올라갑니다.

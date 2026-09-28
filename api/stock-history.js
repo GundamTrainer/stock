@@ -1,10 +1,10 @@
 import { PublicDataError, fetchPublicStockData, normalizeHistoryItems } from "./stock-data.js";
 
 const PERIOD_MAP = {
+  "1d": 1,
+  "1w": 7,
   "1m": 30,
-  "3m": 90,
-  "6m": 180,
-  "1y": 365,
+  "1y": 250,
 };
 
 export default async function handler(req, res) {
@@ -18,16 +18,17 @@ export default async function handler(req, res) {
   }
 
   const period = String(req.query.period || "3m").trim().toLowerCase();
-  const maxRows = PERIOD_MAP[period] || PERIOD_MAP["3m"];
+  const maxRows = PERIOD_MAP[period] || PERIOD_MAP["1m"];
 
   try {
-    const rawItems = await fetchPublicStockData({
-      code,
-      pageNo: 1,
-      numOfRows: Math.min(maxRows, 100),
-    });
-
-    const items = normalizeHistoryItems(rawItems).slice(0, 30);
+    const pages = Math.ceil(maxRows / 100);
+    const pageResults = await Promise.all(Array.from({ length: pages }, function (_, index) {
+      return fetchPublicStockData({ code, pageNo: index + 1, numOfRows: 100 });
+    }));
+    const items = pageResults.flat()
+      .map(function (row) { return normalizeHistoryItems([row])[0]; })
+      .sort(function (a, b) { return b.date.localeCompare(a.date); })
+      .slice(0, maxRows);
     if (!items.length) {
       return res.status(404).json({
         error: "최근 거래일 시세를 찾을 수 없습니다.",

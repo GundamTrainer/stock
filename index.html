@@ -15,7 +15,8 @@
       <div class="hero-copy">
         <div class="eyebrow"><span class="live-dot"></span> MARKET PULSE / STOCK ARENA</div>
         <h1>주식의<br><em>패턴</em></h1>
-        <p>실시간 시장 지수, 종목 검색, 포트폴리오와<br>투자 감정을 한 화면에서 관리합니다.</p>
+        <svg class="hero-volatility-chart" viewBox="0 0 520 180" preserveAspectRatio="none" aria-hidden="true"><path d="M0 142 L42 134 L78 148 L112 110 L145 121 L176 76 L211 96 L246 54 L278 71 L314 38 L347 80 L382 48 L418 64 L452 22 L486 39 L520 10"/></svg>
+        <p>거래일 기준 시장 지수, 종목 검색, 포트폴리오와<br>투자 감정을 한 화면에서 관리합니다.</p>
         <div class="builder-scene" aria-label="Market Builders 캐릭터가 데이터 블록을 옮기는 장면">
           <div class="builder builder-teal"><span class="helmet"></span><span class="builder-body">▲</span><span class="leg leg-a"></span><span class="leg leg-b"></span></div>
           <div class="builder builder-orange"><span class="helmet"></span><span class="builder-body">▼</span><span class="leg leg-a"></span><span class="leg leg-b"></span></div>
@@ -44,15 +45,24 @@
     </section>
     <section class="preview-grid">
       <div class="preview-intro"><span class="kicker">DATA FIRST, TRADING SECOND</span><h2>시장의 흐름을 읽는<br>실전형 대시보드</h2><p>종목 차트, 시장 지수, 포트폴리오, 커뮤니티 반응까지 투자 판단에 필요한 정보를 한 곳에서 확인할 수 있습니다.</p><a class="btn" href="./pages/market.html">시장 데이터 화면 보기 <span>→</span></a></div>
-      <div class="preview-status"><div class="status-line"><span class="status-icon">01</span><div><b>오늘의 시장</b><small>시장 지수와 상승·하락 순위</small></div><strong>LIVE</strong></div><div class="status-line"><span class="status-icon">02</span><div><b>종목 검색</b><small>1일·1주·1개월 변동 그래프</small></div><strong>ON</strong></div><div class="status-line"><span class="status-icon">03</span><div><b>모의투자</b><small>현금, 보유 종목, 매수·매도</small></div><strong>READY</strong></div></div>
+      <div class="preview-status"><div class="status-line"><span class="status-icon">01</span><div><b>오늘의 시장</b><small>거래일 종가 기준 지수와 상승·하락 순위</small></div><strong>DAILY</strong></div><div class="status-line"><span class="status-icon">02</span><div><b>종목 검색</b><small>1일·1주·1개월·1년 가격 흐름</small></div><strong>DATA</strong></div><div class="status-line"><span class="status-icon">03</span><div><b>모의투자</b><small>현금, 보유 종목, 매수·매도 기록</small></div><strong>READY</strong></div></div>
     </section>
-    <section class="ai-recommendation-panel">
-      <div><span class="kicker">AI MARKET BRIEF</span><h2>오늘의 AI 종목 레이더</h2><p>시장 데이터와 관찰 포인트를 바탕으로 상승·하락 가능성을 요약합니다. 투자 조언이 아닌 학습용 예측입니다.</p></div>
-      <div class="ai-recommendation-actions"><button id="aiRecommendBtn" class="primary-button" type="button">AI 분석 시작</button><span id="aiRecommendationStatus">아직 분석하지 않았습니다.</span></div>
-      <div id="aiRecommendationResult" class="ai-recommendation-result" aria-live="polite"></div>
+    <section class="ticker-section" aria-label="시장 종목 흐름">
+      <div class="ticker-heading"><div><span class="kicker">MARKET WATCH</span><h2>시장 흐름 한눈에</h2></div><a href="./pages/market.html">시장 더 보기 ↗</a></div>
+      <div id="homeTicker" class="home-ticker"><p>시장 데이터를 불러오는 중입니다.</p></div>
     </section>
     <p class="data-disclaimer">시장 데이터는 제공처와 네트워크 상태에 따라 지연될 수 있습니다. 본 서비스는 투자 권유가 아닌 교육용 모의투자 서비스입니다.</p>
   </main>
+
+  <button id="stockBotLauncher" class="stock-bot-launcher" type="button" aria-label="Stock Chat Bot 열기" aria-expanded="false">
+    <span class="bot-orb" aria-hidden="true"><i></i><i></i><b></b></span>
+    <span><small>STOCK CHAT BOT</small><strong>오늘의 종목 레이더</strong></span><span class="bot-launch-arrow">↗</span>
+  </button>
+  <aside id="stockBotPanel" class="stock-bot-panel" aria-label="Stock Chat Bot" aria-hidden="true">
+    <header class="stock-bot-header"><span class="bot-avatar" aria-hidden="true"><i></i><b></b></span><div><strong>Stock Chat Bot</strong><small id="aiRecommendationStatus">시장 데이터 기반 학습용 분석</small></div><button id="stockBotClose" type="button" aria-label="챗봇 닫기">×</button></header>
+    <div id="aiRecommendationResult" class="stock-bot-messages" aria-live="polite"><p class="bot-message">안녕하세요. 최신 제공 시세의 추세·변동성·거래량을 확인해 분석해 드릴게요. 투자 조언이 아닌 학습용 분석입니다.</p></div>
+    <form id="stockBotForm" class="stock-bot-form"><input id="stockBotInput" type="text" maxlength="500" placeholder="예: 오늘 시장 흐름과 주의할 점" aria-label="분석 질문"><button id="aiRecommendBtn" type="submit" aria-label="질문 보내기">분석 ↗</button></form>
+  </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./static/js/public-data-config.js"></script>

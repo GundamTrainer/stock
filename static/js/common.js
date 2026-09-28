@@ -295,11 +295,18 @@ async function askAI(prompt) {
     body: JSON.stringify({ prompt: prompt }),
   });
 
-  const data = await res.json();
+  let data;
+  try {
+    data = await res.json();
+  } catch (error) {
+    if (!res.ok) {
+      throw new Error("API 서버가 응답하지 않습니다. py dev_server.py로 로컬 서버를 실행하거나 Vercel 배포 주소를 사용하세요.");
+    }
+    throw new Error("AI 서버 응답 형식이 올바르지 않습니다.");
+  }
 
   if (!res.ok) {
-    console.error("AI 호출 실패:", res.status, data.error);
-    throw new Error(data.error);
+    throw new Error(data.error || "AI 분석 요청 실패 (HTTP " + res.status + ")");
   }
   return data.text;
 }

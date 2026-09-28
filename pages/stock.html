@@ -10,6 +10,7 @@
   <header id="nav"></header>
 
   <main class="stock-page">
+    <a class="btn stock-back-link" href="./market.html">← 오늘의 시장으로</a>
     <section class="stock-header card">
       <div>
         <span class="kicker">STOCK DETAIL</span>
@@ -50,6 +51,18 @@
         <span>거래대금</span>
         <strong id="detail-tradingValue">-</strong>
       </article>
+    </section>
+
+    <section class="stock-history-panel card" aria-label="종목 가격 추세">
+      <div class="history-heading"><div><span class="kicker">PRICE HISTORY</span><h2>가격 추세</h2><p id="chartDataNote">거래일 종가 데이터 · 실시간 분봉이 아닙니다.</p></div><strong id="stockRangeChange">—</strong></div>
+      <div class="stock-range-tabs" role="group" aria-label="차트 기간 선택">
+        <button type="button" data-period="1d" class="active" aria-pressed="true">1일</button>
+        <button type="button" data-period="1w" aria-pressed="false">1주</button>
+        <button type="button" data-period="1m" aria-pressed="false">1개월</button>
+        <button type="button" data-period="1y" aria-pressed="false">1년</button>
+      </div>
+      <div class="stock-chart-legend"><span id="chartDateRange">데이터를 불러오는 중입니다.</span><span id="chartLastPrice">-</span></div>
+      <div class="stock-history-chart-wrap"><svg id="stockHistoryChart" viewBox="0 0 900 320" preserveAspectRatio="none" role="img" aria-label="선택 기간의 종목 가격 그래프"></svg><p id="stockChartMessage" role="status">가격 이력을 불러오는 중입니다.</p></div>
     </section>
   </main>
 

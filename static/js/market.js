@@ -5,8 +5,7 @@ const RANKING_TARGETS = {
   value: "valueRanking",
 };
 
-const PORTFOLIO_STORAGE_KEY = "stock_arena_portfolio_v1";
-const TRADE_HISTORY_STORAGE_KEY = "stock_arena_trade_history_v1";
+let portfolioCache = null;
 
 const PUBLIC_MARKET_ITEMS = [
   { code: "005930", name: "삼성전자", sector: "디스플레이", price: 73200, change: 1500, changeRate: 2.09, volume: 15400000, tradingValue: 1124000000000, tradeDate: "20260621" },
@@ -27,38 +26,28 @@ let rankingCache = [];
 let marketCache = [];
 let selectedStock = null;
 
-function getPortfolioState() {
-  try {
-    const raw = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
-    if (!raw) {
-      return { cash: 10000000, holdings: {} };
-    }
-    const parsed = JSON.parse(raw);
-    return {
-      cash: Number(parsed.cash || 10000000),
-      holdings: parsed.holdings || {},
-    };
-  } catch (error) {
-    return { cash: 10000000, holdings: {} };
-  }
-}
-
-function savePortfolioState(state) {
-  localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(state));
-}
-
-function saveTradeHistory(mode, stock, qty, total) {
-  let history = [];
-  try { history = JSON.parse(localStorage.getItem(TRADE_HISTORY_STORAGE_KEY) || "[]"); } catch (error) { history = []; }
-  history.push({ mode, code: stock.code, name: stock.name, qty, total, createdAt: new Date().toISOString() });
-  localStorage.setItem(TRADE_HISTORY_STORAGE_KEY, JSON.stringify(history.slice(-200)));
-}
-
 function onAuthReady() {
   loadMarketSummary();
   loadAllRankings();
   bindSearch();
   bindTradeControls();
+  loadPortfolioState();
+  renderPortfolioState();
+}
+
+async function loadPortfolioState() {
+  if (!currentUser || !window.db) {
+    portfolioCache = null;
+    renderPortfolioState();
+    return;
+  }
+  const { data, error } = await db.rpc("stock_arena_get_portfolio");
+  if (error) {
+    console.error("포트폴리오 조회 실패:", error);
+    setTradeStatus(formatSupabaseTradeError(error));
+    return;
+  }
+  portfolioCache = data;
   renderPortfolioState();
 }
 
@@ -125,7 +114,7 @@ async function loadPublicIndexSummary() {
 }
 
 function normalizePublicMarketItem(item) {
-  const code = item.code || item.isinCd || item.shtCd || item.stkCd || item.stockCode || "";
+  const code = item.code || item.srtnCd || item.shtCd || item.stkCd || item.stockCode || item.isinCd || "";
   const name = item.name || item.itmsNm || item.stockName || item.stockNm || "종목명";
   const price = Number(item.price ?? item.clpr ?? item.close ?? item.lastPrice ?? 0);
   const change = Number(item.change ?? item.vs ?? 0);
@@ -499,6 +488,9 @@ function setSelectedStock(item) {
   if (detail1W) detail1W.textContent = formatRate((selectedStock.changeRate || 0) * 4.1);
   if (detail1M) detail1M.textContent = formatRate((selectedStock.changeRate || 0) * 8.7);
 
+  const detailLink = document.getElementById("detailLink");
+  if (detailLink) detailLink.href = "./stock.html?code=" + encodeURIComponent(selectedStock.code);
+
   renderSparkline(selectedStock, "detailChart", Number(selectedStock.changeRate || 0) >= 0);
   renderPortfolioState();
   setTradeStatus("종목이 선택되었습니다. 매수/매도 수량을 입력하세요.");
@@ -517,7 +509,15 @@ function renderPortfolioState() {
   const portfolioList = document.getElementById("portfolioList");
   const portfolioValueEl = document.getElementById("portfolioValue");
   const portfolioSummaryEl = document.getElementById("portfolioSummary");
-  const state = getPortfolioState();
+  const state = portfolioCache;
+
+  if (!currentUser || !state) {
+    if (balanceEl) balanceEl.textContent = currentUser ? "불러오는 중" : "로그인 필요";
+    if (portfolioList) portfolioList.innerHTML = '<div class="holding-row"><div><strong>로그인 후 거래 내역을 저장할 수 있습니다.</strong></div></div>';
+    if (portfolioValueEl) portfolioValueEl.textContent = "-";
+    if (portfolioSummaryEl) portfolioSummaryEl.textContent = "계정 연결 대기";
+    return;
+  }
 
   if (balanceEl) balanceEl.textContent = formatWon(state.cash);
 
@@ -527,7 +527,7 @@ function renderPortfolioState() {
     const price = Number(holding.price || 0);
     const value = price * Number(holding.qty || 0);
     totalMarketValue += value;
-    return '<div class="holding-row"><div><strong>' + holding.name + '</strong><small>' + holding.qty + '주</small></div><div><strong>' + formatWon(value) + '</strong></div></div>';
+    return '<div class="holding-row"><div><strong>' + holding.name + '</strong><small>' + holding.qty + '주 · 평균 단가 ' + formatWon(holding.averagePrice || price) + '</small></div><div><strong>' + formatWon(value) + '</strong></div></div>';
   }).join("");
 
   if (portfolioList) {
@@ -536,7 +536,7 @@ function renderPortfolioState() {
 
   const totalAssets = state.cash + totalMarketValue;
   const invested = Object.values(state.holdings || {}).reduce(function (sum, holding) {
-    return sum + Number(holding.price || 0) * Number(holding.qty || 0);
+    return sum + Number(holding.averagePrice || holding.price || 0) * Number(holding.qty || 0);
   }, 0);
   const estimatedProfit = totalMarketValue - invested;
   const profitTodayEl = document.getElementById("profitToday");
@@ -547,7 +547,11 @@ function renderPortfolioState() {
   if (portfolioSummaryEl) portfolioSummaryEl.textContent = holdings.length ? holdings.length + "개 종목 보유" : "보유 종목 없음";
 }
 
-function executeTrade(mode) {
+async function executeTrade(mode) {
+  if (!currentUser) {
+    setTradeStatus("거래 기록을 Supabase 계정에 저장하려면 먼저 로그인해 주세요.");
+    return;
+  }
   if (!selectedStock) {
     setTradeStatus("먼저 종목을 선택해 주세요.");
     return;
@@ -560,44 +564,48 @@ function executeTrade(mode) {
     return;
   }
 
-  const state = getPortfolioState();
-
-  if (mode === "buy") {
-    const total = qty * price;
-    if (state.cash < total) {
-      setTradeStatus("현금이 부족합니다. 수량을 줄여 보세요.");
-      return;
-    }
-    const current = state.holdings[selectedStock.code] || { code: selectedStock.code, name: selectedStock.name, qty: 0, price: 0 };
-    current.qty += qty;
-    current.price = price;
-    state.holdings[selectedStock.code] = current;
-    state.cash -= total;
-    saveTradeHistory(mode, selectedStock, qty, total);
-    savePortfolioState(state);
-    renderPortfolioState();
-    setTradeStatus(selectedStock.name + "을(를) " + qty + "주 매수했습니다.");
+  setTradeStatus("Supabase에 거래를 저장하는 중...");
+  let result;
+  try {
+    result = await db.rpc("stock_arena_execute_trade", {
+      p_mode: mode,
+      p_stock_code: String(selectedStock.code),
+      p_stock_name: selectedStock.name,
+      p_quantity: qty,
+      p_price: price,
+    });
+  } catch (error) {
+    console.error("거래 저장 요청을 완료하지 못했습니다:", error);
+    setTradeStatus("Supabase 연결 실패: 인터넷 연결과 Supabase 프로젝트 상태를 확인하세요.");
     return;
   }
-
-  const current = state.holdings[selectedStock.code];
-  if (!current || current.qty < qty) {
-    setTradeStatus("보유 수량이 부족합니다.");
+  const { data, error } = result;
+  if (error) {
+    console.error("거래 저장 실패:", error);
+    setTradeStatus(formatSupabaseTradeError(error));
     return;
   }
-  current.qty -= qty;
-  state.cash += qty * price;
-  saveTradeHistory(mode, selectedStock, qty, qty * price);
-
-  if (current.qty <= 0) {
-    delete state.holdings[selectedStock.code];
-  } else {
-    state.holdings[selectedStock.code] = current;
-  }
-
-  savePortfolioState(state);
+  portfolioCache = data;
   renderPortfolioState();
-  setTradeStatus(selectedStock.name + "을(를) " + qty + "주 매도했습니다.");
+  setTradeStatus(selectedStock.name + " " + qty + "주 " + (mode === "buy" ? "매수" : "매도") + " 완료 · 계정에 저장됨");
+}
+
+function formatSupabaseTradeError(error) {
+  const message = String(error?.message || "");
+  const code = String(error?.code || "");
+  if (message.includes("INSUFFICIENT_CASH")) return "현금이 부족합니다. 매수 수량을 줄여 주세요.";
+  if (message.includes("INSUFFICIENT_SHARES")) return "보유 수량이 부족해 매도할 수 없습니다.";
+  if (message.includes("AUTH_REQUIRED") || code === "PGRST301") return "로그인 세션이 만료되었습니다. 로그아웃 후 다시 로그인해 주세요.";
+  if (code === "PGRST202" || message.includes("stock_arena_execute_trade") || message.includes("stock_arena_get_portfolio")) {
+    return "거래 RPC가 없습니다. Supabase SQL Editor에서 supabase/stock-arena-trading.sql 전체를 실행하고 1분 후 새로고침하세요.";
+  }
+  if (code === "42501" || message.toLowerCase().includes("permission denied")) {
+    return "Supabase 권한 오류입니다. SQL 파일의 RLS 정책 및 authenticated 실행 권한이 적용됐는지 확인하세요.";
+  }
+  if (code === "42P01" || code === "42703") {
+    return "Supabase 테이블/열이 없습니다. 최신 supabase/stock-arena-trading.sql 전체를 SQL Editor에서 다시 실행하세요.";
+  }
+  return "거래 저장 실패 [" + (code || "오류") + "]: " + (message || "Supabase SQL 및 연결을 확인하세요.");
 }
 
 function setTradeStatus(message) {

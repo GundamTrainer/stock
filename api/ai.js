@@ -29,11 +29,12 @@ export default async function handler(req, res) {
 
   const key = raw.trim().replace(/^["']|["']$/g, "");
 
-  console.log("키 확인:", { 이름: found, 길이: key.length, 앞4글자: key.slice(0, 4) });
-
   const { prompt } = req.body || {};
   if (!prompt) {
     return res.status(400).json({ error: "prompt 가 비어 있습니다." });
+  }
+  if (typeof prompt !== "string" || prompt.length > 12000) {
+    return res.status(400).json({ error: "분석 요청은 12,000자 이내로 입력해 주세요." });
   }
 
   
@@ -41,6 +42,8 @@ export default async function handler(req, res) {
   // ———————————————————————————————— 2. Groq 부르기 ————————————————————————————————
   
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(function () { controller.abort(); }, 25000);
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -50,15 +53,19 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: MODEL,
         messages: [{ role: "user", content: prompt }],
+        temperature: 0.35,
+        max_completion_tokens: 1800,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     const data = await r.json();
 
     // 이 아래는 에러 처리하는 부분이므로 특별한 경우가 아니라면 그대로 두는 것을 추천
 
     if (!r.ok) {
-      console.error("Groq 오류:", r.status, JSON.stringify(data));
+      console.error("Groq 요청 오류:", r.status);
 
       if (r.status === 401) {
         return res.status(500).json({
@@ -80,7 +87,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ text: data.choices[0].message.content });
   } catch (e) {
-    console.error("Groq 연결 실패:", e);
+    console.error("Groq 연결 실패:", e && e.name === "AbortError" ? "timeout" : "request failed");
     return res.status(502).json({ error: "AI 서버에 연결하지 못했습니다." });
   }
 }
