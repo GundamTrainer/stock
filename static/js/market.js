@@ -120,13 +120,13 @@ function normalizePublicMarketItem(item) {
   const change = Number(item.change ?? item.vs ?? 0);
   const changeRate = Number(item.changeRate ?? item.fltRt ?? item.prdy_ctrt ?? 0);
   const volume = Number(item.volume ?? item.acmlVol ?? item.trqu ?? 0);
-  const tradingValue = Number(item.tradingValue ?? item.acmlTrPbmn ?? item.dealAmt ?? 0);
+  const tradingValue = Number(item.tradingValue ?? item.trPrc ?? item.acmlTrPbmn ?? item.dealAmt ?? 0);
   const tradeDate = item.tradeDate || item.basDt || item.date || "20260621";
 
   return {
     code: String(code),
     name: String(name),
-    sector: String(item.sector || item.category || "시장"),
+    sector: String(item.sector || item.mrktCtg || item.category || "시장"),
     price: Number.isFinite(price) ? price : 0,
     change: Number.isFinite(change) ? change : 0,
     changeRate: Number.isFinite(changeRate) ? changeRate : 0,
@@ -177,39 +177,14 @@ async function loadPublicMarketData() {
     return marketCache;
   }
 
-  const apiKey = getPublicApiKey();
-  if (apiKey) {
-    try {
-      const url = new URL("https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo");
-      url.search = new URLSearchParams({
-        serviceKey: apiKey,
-        resultType: "json",
-        pageNo: "1",
-        numOfRows: "100",
-      }).toString();
-
-      const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
-      if (!response.ok) throw new Error("public-data-status-" + response.status);
-      const payload = await response.json();
-      const items = payload?.response?.body?.items?.item || payload?.response?.body?.item || [];
-      const normalized = (Array.isArray(items) ? items : [items]).map(normalizePublicMarketItem).filter(function (item) {
-        return item.code && item.name;
-      });
-      if (normalized.length) {
-        marketCache = normalized;
-        return marketCache;
-      }
-    } catch (error) {
-      console.warn("공공데이터포털 연결에 실패해 로컬 샘플 데이터를 사용합니다.", error);
-    }
-  }
-
-  marketCache = PUBLIC_MARKET_ITEMS.map(function (item) {
-    return {
-      ...item,
-      updatedAt: item.tradeDate,
-    };
+  const response = await fetch("/api/stock-list");
+  let payload = {};
+  try { payload = await response.json(); } catch (error) { /* Report a stable API message below. */ }
+  if (!response.ok) throw new Error(payload.error || "금융위 V2 종목 목록 API 요청 실패 (" + response.status + ")");
+  marketCache = (payload.items || []).map(normalizePublicMarketItem).filter(function (item) {
+    return item.code && item.name && item.price > 0;
   });
+  if (!marketCache.length) throw new Error("금융위 V2 종목 목록에서 거래 가능한 종목이 없습니다.");
   return marketCache;
 }
 
@@ -291,7 +266,7 @@ async function loadRanking(type) {
     return ranking;
   } catch (error) {
     console.error(type + " 시장 순위를 불러오지 못했습니다:", error);
-    showError(targetId, "공공데이터 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.");
+    showError(targetId, error.message || "금융위원회 V2 시세 API에 연결할 수 없습니다.");
     throw error;
   }
 }

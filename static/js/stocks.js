@@ -6,6 +6,9 @@ function onAuthReady() {
     renderCatalogTabs(params.get("sector") || "전체");
     bindCatalogSearch(items);
     renderCatalog(items, params.get("sector") || "전체", "");
+  }).catch(function (error) {
+    const grid = document.getElementById("catalogGrid");
+    if (grid) grid.innerHTML = '<div class="ranking-state is-error">' + escapeCatalogValue(error.message || "주식 데이터를 불러오지 못했습니다.") + '</div>';
   });
 }
 

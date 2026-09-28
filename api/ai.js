@@ -75,6 +75,19 @@ export default async function handler(req, res) {
         });
       }
 
+      if (r.status === 403) {
+        return res.status(502).json({
+          error:
+            "Groq가 요청을 거부했습니다(403). Groq 콘솔에서 API 키가 활성 상태인지, 해당 프로젝트/조직의 API 접근 권한과 openai/gpt-oss-20b 모델 접근이 허용됐는지 확인하세요.",
+        });
+      }
+
+      if (r.status === 429) {
+        return res.status(502).json({
+          error: "Groq API 사용 한도에 도달했습니다(429). 계정의 사용량/요청 제한을 확인한 뒤 잠시 후 다시 시도하세요.",
+        });
+      }
+
       if (r.status === 404) {
         return res.status(500).json({
           error:

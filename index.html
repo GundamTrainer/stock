@@ -60,7 +60,7 @@
   </button>
   <aside id="stockBotPanel" class="stock-bot-panel" aria-label="Stock Chat Bot" aria-hidden="true">
     <header class="stock-bot-header"><span class="bot-avatar" aria-hidden="true"><i></i><b></b></span><div><strong>Stock Chat Bot</strong><small id="aiRecommendationStatus">시장 데이터 기반 학습용 분석</small></div><button id="stockBotClose" type="button" aria-label="챗봇 닫기">×</button></header>
-    <div id="aiRecommendationResult" class="stock-bot-messages" aria-live="polite"><p class="bot-message">안녕하세요. 최신 제공 시세의 추세·변동성·거래량을 확인해 분석해 드릴게요. 투자 조언이 아닌 학습용 분석입니다.</p></div>
+    <div id="aiRecommendationResult" class="stock-bot-messages" aria-live="polite"><p class="bot-message">안녕하세요. 금융위원회 공공데이터포털 V2의 주식 시세와 거래일별 이력을 불러와 Groq가 근거 중심으로 분석합니다. “수익증권”, “신주인수권증권”, “신주인수권증서”를 질문하면 해당 자료를 찾아볼게요. 투자 조언이 아닌 학습용 분석입니다.</p></div>
     <form id="stockBotForm" class="stock-bot-form"><input id="stockBotInput" type="text" maxlength="500" placeholder="예: 오늘 시장 흐름과 주의할 점" aria-label="분석 질문"><button id="aiRecommendBtn" type="submit" aria-label="질문 보내기">분석 ↗</button></form>
   </aside>
 

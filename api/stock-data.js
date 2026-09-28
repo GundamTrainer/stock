@@ -1,4 +1,11 @@
-const DEFAULT_BASE_URL = "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService";
+const DEFAULT_BASE_URL = "https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2";
+const STOCK_INFO_BASE_URL = "https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2";
+const PRICE_ENDPOINTS = {
+  stocks: "getStockPriceInfo_V2",
+  securities: "getSecuritiesPriceInfo_V2",
+  preemptiveRights: "getPreemptiveRightSecuritiesPriceInfo_V2",
+  rightCertificates: "getPreemptiveRightCertificatePriceInfo_V2",
+};
 
 export class PublicDataError extends Error {
   constructor(message, statusCode, code) {
@@ -10,7 +17,11 @@ export class PublicDataError extends Error {
 }
 
 export function getBaseUrl() {
-  return (process.env.DATA_GO_KR_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  return (process.env.DATA_GO_KR_BASE_URL || STOCK_INFO_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
+
+export function getPriceEndpoint(assetType = "stocks") {
+  return PRICE_ENDPOINTS[assetType] || PRICE_ENDPOINTS.stocks;
 }
 
 export function parseNumber(value) {
@@ -73,18 +84,19 @@ export function normalizePublicStockItem(item, fallbackCode) {
   }
   const name = pickFirst(item, ["itmsNm", "isnm", "stockName", "stockNm", "name", "korIsnm", "nm"]) || "";
   const tradeDate = pickFirst(item, ["basDt", "stdDt", "tradeDate", "date", "trdDt"]) || "";
-  const price = parseNumber(pickFirst(item, ["clpr", "close", "lastPrice", "stck_prpr", "price", "curPrice", "mkp"]));
-  const open = parseNumber(pickFirst(item, ["mkp", "open", "oprc", "stck_oprc", "openingPrice"]));
-  const high = parseNumber(pickFirst(item, ["hipr", "high", "stck_hgpr", "max", "highPrice"]));
-  const low = parseNumber(pickFirst(item, ["lopr", "low", "stck_lwpr", "min", "lowPrice"]));
+  const price = parseNumber(pickFirst(item, ["clpr", "clprprc", "close", "lastPrice", "stck_prpr", "price", "curPrice", "mkp"]));
+  const open = parseNumber(pickFirst(item, ["mkp", "mkpprc", "open", "oprc", "stck_oprc", "openingPrice"]));
+  const high = parseNumber(pickFirst(item, ["hipr", "hiprprc", "high", "stck_hgpr", "max", "highPrice"]));
+  const low = parseNumber(pickFirst(item, ["lopr", "loprprc", "low", "stck_lwpr", "min", "lowPrice"]));
   const volume = parseNumber(pickFirst(item, ["acmlVol", "trqu", "volume", "acml_vol", "tradeQty", "vol"]));
-  const tradingValue = parseNumber(pickFirst(item, ["acmlTrPbmn", "tradingValue", "value", "dealAmt", "trvAmt", "amt"]));
-  const change = parseNumber(pickFirst(item, ["vs", "change", "prdy_vrss", "diff", "delta"]));
-  const changeRate = parseNumber(pickFirst(item, ["fltRt", "changeRate", "prdy_ctrt", "chgRate", "fluctuationRate", "rate"]));
+  const tradingValue = parseNumber(pickFirst(item, ["trPrc", "acmlTrPbmn", "tradingValue", "value", "dealAmt", "trvAmt", "amt"]));
+  const change = parseNumber(pickFirst(item, ["vs", "vsprc", "change", "prdy_vrss", "diff", "delta"]));
+  const changeRate = parseNumber(pickFirst(item, ["fltRt", "fltrt", "changeRate", "prdy_ctrt", "chgRate", "fluctuationRate", "rate"]));
 
   return {
     code: String(code),
     name: String(name || code || "종목명 없음"),
+    sector: String(pickFirst(item, ["mrktCtg", "sector", "category"]) || "시장"),
     price: price === null ? 0 : price,
     change: change === null ? 0 : change,
     changeRate: changeRate === null ? 0 : changeRate,
@@ -102,13 +114,17 @@ export function normalizePublicStockItem(item, fallbackCode) {
 
 export function normalizeHistoryItems(items) {
   return (Array.isArray(items) ? items : []).map(function (row) {
+    let code = pickFirst(row, ["srtnCd", "shtCd", "stkCd", "stockCode", "code", "isinCd"]);
+    if (/^KR\d{10}$/.test(String(code || ""))) code = String(code).slice(3, 9);
     const date = pickFirst(row, ["basDt", "tradeDate", "stdDt", "date", "trdDt"]) || "";
     return {
+      code: code === null ? "" : String(code),
+      name: String(pickFirst(row, ["itmsNm", "stockName", "stockNm", "name"]) || ""),
       date: String(date),
-      open: parseNumber(pickFirst(row, ["mkp", "open", "oprc", "stck_oprc"])) || 0,
-      high: parseNumber(pickFirst(row, ["hipr", "high", "stck_hgpr"])) || 0,
-      low: parseNumber(pickFirst(row, ["lopr", "low", "stck_lwpr"])) || 0,
-      close: parseNumber(pickFirst(row, ["clpr", "close", "stck_prpr"])) || 0,
+      open: parseNumber(pickFirst(row, ["mkp", "mkpprc", "open", "oprc", "stck_oprc"])) || 0,
+      high: parseNumber(pickFirst(row, ["hipr", "hiprprc", "high", "stck_hgpr"])) || 0,
+      low: parseNumber(pickFirst(row, ["lopr", "loprprc", "low", "stck_lwpr"])) || 0,
+      close: parseNumber(pickFirst(row, ["clpr", "clprprc", "close", "stck_prpr"])) || 0,
       volume: parseNumber(pickFirst(row, ["acmlVol", "volume", "tradeQty", "vol"])) || 0,
     };
   });
@@ -118,8 +134,10 @@ export async function fetchPublicStockData(options = {}) {
   const code = typeof options.code === "string" ? options.code : "";
   const pageNo = options.pageNo || 1;
   const numOfRows = options.numOfRows || 10;
-  const period = options.period || "";
+  const beginBasDt = options.beginBasDt || "";
+  const endBasDt = options.endBasDt || "";
   const tradeDate = options.tradeDate || "";
+  const assetType = options.assetType || "stocks";
 
   const rawApiKey = process.env.DATA_GO_KR_API_KEY;
   if (!rawApiKey) {
@@ -132,30 +150,23 @@ export async function fetchPublicStockData(options = {}) {
 
   const baseUrl = getBaseUrl();
   const params = new URLSearchParams({
-    serviceKey: apiKey,
     resultType: "json",
     pageNo: String(pageNo),
     numOfRows: String(numOfRows),
   });
 
   if (code) {
-    params.set("ISU_CD", code);
-    params.set("STK_CD", code);
-    params.set("isinCd", code);
-    params.set("stockCode", code);
+    params.set("likeSrtnCd", code);
   }
 
   if (tradeDate) {
-    params.set("BAS_DT", tradeDate);
-    params.set("STD_DT", tradeDate);
-    params.set("tradeDate", tradeDate);
+    params.set("basDt", tradeDate);
   }
 
-  if (period) {
-    params.set("period", period);
-  }
+  if (beginBasDt) params.set("beginBasDt", beginBasDt);
+  if (endBasDt) params.set("endBasDt", endBasDt);
 
-  const url = `${baseUrl}/getStockPriceInfo?${params.toString()}`;
+  const url = `${baseUrl}/${getPriceEndpoint(assetType)}?serviceKey=${apiKey}&${params.toString()}`;
   const controller = new AbortController();
   const timeout = setTimeout(function () {
     controller.abort();
@@ -174,7 +185,11 @@ export async function fetchPublicStockData(options = {}) {
     }
 
     if (!response.ok) {
-      throw new PublicDataError("공공데이터포털 호출에 실패했습니다.", 502, "PUBLIC_DATA_FETCH_FAILED");
+      const status = response.status;
+      const message = status === 403
+        ? "금융위원회 V2 API가 HTTP 403을 반환했습니다. 활용신청 승인 상태와 서비스키 종류를 확인하세요."
+        : "금융위원회 V2 API HTTP " + status + " 응답입니다.";
+      throw new PublicDataError(message, status === 403 ? 403 : 502, status === 403 ? "PUBLIC_DATA_FORBIDDEN" : "PUBLIC_DATA_FETCH_FAILED");
     }
 
     const payload = await response.json();

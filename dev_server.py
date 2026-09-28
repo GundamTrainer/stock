@@ -9,7 +9,7 @@ import json
 import mimetypes
 import os
 import re
-import threading
+from datetime import datetime, timedelta, timezone
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,7 +17,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_STOCK_URL = "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo"
+STOCK_INFO_BASE_URL = "https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2"
+PRICE_ENDPOINTS = {
+    "stocks": "getStockPriceInfo_V2",
+    "securities": "getSecuritiesPriceInfo_V2",
+    "preemptiveRights": "getPreemptiveRightSecuritiesPriceInfo_V2",
+    "rightCertificates": "getPreemptiveRightCertificatePriceInfo_V2",
+}
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "openai/gpt-oss-20b"
 
@@ -74,29 +80,36 @@ def normalize_stock(row):
     return {
         "code": raw_code,
         "name": str(row.get("itmsNm") or row.get("stockName") or row.get("stockNm") or row.get("name") or raw_code),
-        "price": as_number(row.get("clpr", row.get("close", row.get("price", 0)))),
+        "price": as_number(row.get("clpr", row.get("clprprc", row.get("close", row.get("price", 0))))),
         "change": as_number(row.get("vs", row.get("change", 0))),
-        "changeRate": as_number(row.get("fltRt", row.get("changeRate", row.get("prdy_ctrt", 0)))),
+        "changeRate": as_number(row.get("fltRt", row.get("fltrt", row.get("changeRate", row.get("prdy_ctrt", 0))))),
         "open": as_number(row.get("mkp", row.get("open", 0))),
         "high": as_number(row.get("hipr", row.get("high", 0))),
         "low": as_number(row.get("lopr", row.get("low", 0))),
         "volume": as_number(row.get("acmlVol", row.get("trqu", row.get("volume", 0)))),
-        "tradingValue": as_number(row.get("acmlTrPbmn", row.get("tradingValue", row.get("dealAmt", 0)))),
+        "tradingValue": as_number(row.get("trPrc", row.get("trPrc", row.get("acmlTrPbmn", row.get("tradingValue", row.get("dealAmt", 0)))))),
+        "sector": str(row.get("mrktCtg") or row.get("sector") or "시장"),
         "tradeDate": str(row.get("basDt") or row.get("tradeDate") or row.get("date") or ""),
         "updatedAt": str(row.get("basDt") or row.get("tradeDate") or row.get("date") or ""),
         "isRealtime": False,
     }
 
 
-def fetch_public_page(page_no: int, rows: int, code: str = ""):
-    key = urllib.parse.unquote(os.environ.get("DATA_GO_KR_API_KEY", "").strip().strip("\"'"))
+def fetch_public_page(page_no: int, rows: int, code: str = "", begin_date: str = "", end_date: str = "", asset: str = "stocks"):
+    key = os.environ.get("DATA_GO_KR_API_KEY", "").strip().strip("\"'")
     if not key:
         raise RuntimeError("DATA_GO_KR_API_KEY가 설정되지 않았습니다. 루트 .env.local에 키를 입력하세요.")
-    base = os.environ.get("DATA_GO_KR_BASE_URL", "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService").rstrip("/")
+    base = os.environ.get("DATA_GO_KR_BASE_URL", STOCK_INFO_BASE_URL).rstrip("/")
     params = {"serviceKey": key, "resultType": "json", "pageNo": str(page_no), "numOfRows": str(rows)}
     if code:
-        params.update({"ISU_CD": code, "STK_CD": code, "isinCd": code, "stockCode": code})
-    url = base + "/getStockPriceInfo?" + urllib.parse.urlencode(params)
+        params["likeSrtnCd"] = code
+    if begin_date:
+        params["beginBasDt"] = begin_date
+    if end_date:
+        params["endBasDt"] = end_date
+    endpoint = PRICE_ENDPOINTS.get(asset, PRICE_ENDPOINTS["stocks"])
+    encoded_params = urllib.parse.urlencode({name: value for name, value in params.items() if name != "serviceKey"})
+    url = base + "/" + endpoint + "?serviceKey=" + key + "&" + encoded_params
     request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "StockArenaLocal/1.0"})
     with urllib.request.urlopen(request, timeout=12) as response:
         payload = json.loads(response.read().decode("utf-8"))
@@ -116,15 +129,11 @@ def public_data_error(error):
     return str(error)
 
 
-def fetch_stock_rows(code: str, count: int):
-    pages = max(1, (count + 99) // 100)
-    results = []
-    # Keep outbound work small and deterministic; requests are sequential to respect provider quotas.
-    for page in range(1, pages + 1):
-        results.extend(fetch_public_page(page, min(100, count - len(results)), code))
-        if len(results) >= count:
-            break
-    return results[:count]
+def fetch_stock_rows(code: str, calendar_days: int, asset: str = "stocks"):
+    today = datetime.now(timezone.utc).date()
+    begin = (today - timedelta(days=calendar_days)).strftime("%Y%m%d")
+    end = today.strftime("%Y%m%d")
+    return fetch_public_page(1, calendar_days, code, begin, end, asset)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -146,6 +155,8 @@ class Handler(BaseHTTPRequestHandler):
             })
         if route == "/api/stock-rankings":
             return self.stock_rankings(query)
+        if route == "/api/stock-list":
+            return self.stock_list(query)
         if route == "/api/stock-price":
             return self.stock_price(query)
         if route == "/api/stock-history":
@@ -181,12 +192,23 @@ class Handler(BaseHTTPRequestHandler):
             return send_json(self, 200, {"text": result["choices"][0]["message"]["content"]})
         except urllib.error.HTTPError as error:
             status = error.code
+            try:
+                groq_error = json.loads(error.read().decode("utf-8"))
+                upstream_message = str(((groq_error.get("error") or {}).get("message") or ""))[:240]
+            except (ValueError, AttributeError):
+                upstream_message = ""
             if status == 401:
                 message = "Groq가 API 키를 거부했습니다. GROQ_API_KEY 값과 키 상태를 확인하세요."
+            elif status == 403:
+                message = "Groq가 요청을 거부했습니다(403). 키 활성 상태, 프로젝트/조직 API 접근 권한과 모델 접근 권한을 확인하세요."
             elif status == 404:
                 message = "Groq 모델을 사용할 수 없습니다. 모델 이름 또는 계정 접근 권한을 확인하세요."
+            elif status == 429:
+                message = "Groq API 사용 한도에 도달했습니다(429). 사용량과 요청 제한을 확인한 뒤 재시도하세요."
             else:
                 message = "Groq 요청 실패 (HTTP %s). 계정 사용량과 요청 형식을 확인하세요." % status
+            if upstream_message:
+                message += " 상세: " + upstream_message
             return send_json(self, 502, {"error": message})
         except urllib.error.URLError:
             return send_json(self, 502, {"error": "Groq 서버에 연결할 수 없습니다. 인터넷 연결을 확인하세요."})
@@ -197,6 +219,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def stock_rankings(self, query):
         kind = (query.get("type") or ["rise"])[0]
+        asset = (query.get("asset") or ["stocks"])[0]
         sorters = {
             "rise": lambda item: -item["changeRate"],
             "fall": lambda item: item["changeRate"],
@@ -205,27 +228,63 @@ class Handler(BaseHTTPRequestHandler):
         }
         if kind not in sorters:
             return send_json(self, 400, {"error": "지원하지 않는 순위 유형입니다."})
+        if asset not in PRICE_ENDPOINTS:
+            return send_json(self, 400, {"error": "지원하지 않는 V2 데이터 유형입니다."})
         try:
-            items = [normalize_stock(row) for row in fetch_public_page(1, 100)]
-            items = [item for item in items if item["code"] and item["name"]]
+            today = datetime.now(timezone.utc).date()
+            begin = (today - timedelta(days=10)).strftime("%Y%m%d")
+            end = today.strftime("%Y%m%d")
+            raw = fetch_public_page(1, 1000, begin_date=begin, end_date=end, asset=asset)
+            latest = {}
+            for item in sorted((normalize_stock(row) for row in raw), key=lambda value: value["tradeDate"], reverse=True):
+                if item["code"] and item["code"] not in latest:
+                    latest[item["code"]] = item
+            items = list(latest.values())
             items.sort(key=sorters[kind])
             for index, item in enumerate(items[:10], 1):
                 item["rank"] = index
-            return send_json(self, 200, {"type": kind, "source": "금융위원회 주식시세정보", "updatedAt": items[0]["tradeDate"] if items else "", "items": items[:10]})
+            return send_json(self, 200, {"type": kind, "asset": asset, "source": "금융위원회 V2 시세정보", "updatedAt": items[0]["tradeDate"] if items else "", "items": items[:10]})
+        except Exception as error:
+            return send_json(self, 502, {"error": public_data_error(error)})
+
+    def stock_list(self, query):
+        asset = (query.get("asset") or ["stocks"])[0]
+        if asset not in PRICE_ENDPOINTS:
+            return send_json(self, 400, {"error": "지원하지 않는 V2 금융상품 유형입니다."})
+        try:
+            today = datetime.now(timezone.utc).date()
+            begin = (today - timedelta(days=10)).strftime("%Y%m%d")
+            end = today.strftime("%Y%m%d")
+            raw = fetch_public_page(1, 1000, begin_date=begin, end_date=end, asset=asset)
+            latest = {}
+            for item in sorted((normalize_stock(row) for row in raw), key=lambda value: value["tradeDate"], reverse=True):
+                if item["code"] and item["price"] > 0 and item["code"] not in latest:
+                    latest[item["code"]] = item
+            items = list(latest.values())
+            return send_json(self, 200, {
+                "source": "금융위원회 V2 주식시세정보",
+                "asset": asset,
+                "updatedAt": items[0]["tradeDate"] if items else "",
+                "items": items,
+            })
         except Exception as error:
             return send_json(self, 502, {"error": public_data_error(error)})
 
     def stock_price(self, query):
         code = (query.get("code") or [""])[0]
+        asset = (query.get("asset") or ["stocks"])[0]
         if not re.fullmatch(r"\d{6}", code):
             return send_json(self, 400, {"error": "종목코드는 숫자 6자리여야 합니다."})
+        if asset not in PRICE_ENDPOINTS:
+            return send_json(self, 400, {"error": "지원하지 않는 V2 데이터 유형입니다."})
         try:
-            rows = fetch_stock_rows(code, 10)
+            rows = fetch_stock_rows(code, 10, asset)
             matches = [normalize_stock(row) for row in rows]
             match = next((item for item in matches if item["code"] == code), matches[0] if matches else None)
             if not match:
                 return send_json(self, 404, {"error": "최근 거래일 시세를 찾을 수 없습니다."})
-            match["source"] = "금융위원회 주식시세정보"
+            match["source"] = "금융위원회 V2 시세정보"
+            match["asset"] = asset
             return send_json(self, 200, match)
         except Exception as error:
             return send_json(self, 502, {"error": public_data_error(error)})
@@ -233,16 +292,25 @@ class Handler(BaseHTTPRequestHandler):
     def stock_history(self, query):
         code = (query.get("code") or [""])[0]
         period = (query.get("period") or ["1m"])[0].lower()
-        rows_by_period = {"1d": 1, "1w": 7, "1m": 30, "1y": 250}
+        asset = (query.get("asset") or ["stocks"])[0]
+        period_settings = {
+            "1d": (5, 5), "1w": (16, 10), "1m": (45, 30), "1y": (400, 250),
+        }
         if not re.fullmatch(r"\d{6}", code):
             return send_json(self, 400, {"error": "종목코드는 숫자 6자리여야 합니다."})
-        if period not in rows_by_period:
+        if period not in period_settings:
             return send_json(self, 400, {"error": "기간은 1d, 1w, 1m, 1y 중 하나여야 합니다."})
+        if asset not in PRICE_ENDPOINTS:
+            return send_json(self, 400, {"error": "지원하지 않는 V2 데이터 유형입니다."})
         try:
-            rows = fetch_stock_rows(code, rows_by_period[period])
+            calendar_days, requested_rows = period_settings[period]
+            rows = fetch_stock_rows(code, calendar_days, asset)
+            rows = rows[:requested_rows]
             items = []
             for row in rows:
                 stock = normalize_stock(row)
+                if stock["code"] != code:
+                    continue
                 items.append({
                     "date": stock["tradeDate"], "open": stock["open"], "high": stock["high"],
                     "low": stock["low"], "close": stock["price"], "volume": stock["volume"],
@@ -250,7 +318,7 @@ class Handler(BaseHTTPRequestHandler):
             items.sort(key=lambda item: item["date"], reverse=True)
             if not items:
                 return send_json(self, 404, {"error": "최근 거래일 이력이 없습니다."})
-            return send_json(self, 200, {"code": code, "period": period, "isRealtime": False, "source": "금융위원회 주식시세정보", "items": items})
+            return send_json(self, 200, {"code": code, "period": period, "asset": asset, "isRealtime": False, "source": "금융위원회 V2 시세정보", "items": items})
         except Exception as error:
             return send_json(self, 502, {"error": public_data_error(error)})
 

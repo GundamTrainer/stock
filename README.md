@@ -56,6 +56,19 @@ py dev_server.py
 
 그 다음 `http://127.0.0.1:8001`을 엽니다. 서버는 루트 `.env.local`의 Groq·금융위 API 키를 읽고, 환경 파일 URL은 외부에 제공하지 않습니다. 키가 읽혔는지는 `/api/health`에서 값이 아닌 설정 여부만 확인할 수 있습니다.
 
+금융위 시세는 다음 V2 서비스들을 사용합니다:
+
+- `stocks` → `getStockPriceInfo_V2`
+- `securities` → `getSecuritiesPriceInfo_V2`
+- `preemptiveRights` → `getPreemptiveRightSecuritiesPriceInfo_V2`
+- `rightCertificates` → `getPreemptiveRightCertificatePriceInfo_V2`
+
+상세 차트의 금융상품 선택에서 유형을 바꿀 수 있고, 서버 목록 API는 `?asset=securities`처럼 선택합니다. 인증키는 코드나 브라우저에 넣지 않습니다.
+
+홈 Stock Chat Bot은 질문에 맞는 금융위 V2 종목 목록과 상승·하락·거래대금 순위, 관심 종목별 최근 이력을 서버에서 받아 Groq에 전달합니다. “수익증권”, “신주인수권증권”, “신주인수권증서” 질문은 해당 V2 자료를 선택하고, 기본 질문은 주식 자료를 분석합니다. Groq는 전달된 공개데이터 범위 안에서만 대화/분석하며, 시세 API가 실패하면 근거 없이 분석을 이어가지 않습니다.
+
+로컬 V2 주식 시세/이력 응답은 확인되었지만 Groq는 HTTP 403을 반환할 수 있습니다. 이 경우 Groq 콘솔에서 키가 활성 상태인지, API 사용 프로젝트/조직과 `openai/gpt-oss-20b` 모델 접근 권한을 확인하세요. HTTP 401은 키 불일치, 429는 사용량 한도 문제입니다.
+
 운영과 동일한 Vercel Function 실행을 원하면 Node.js와 Vercel CLI를 설치한 뒤 `vercel dev`를 사용할 수 있습니다. 배포 환경에서는 Vercel에 API 키를 별도로 등록해야 합니다.
 
 > 참고: `python -m http.server` 는 정적 페이지만 제공하므로 API 호출은 동작하지 않습니다.

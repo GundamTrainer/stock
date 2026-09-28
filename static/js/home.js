@@ -1,4 +1,4 @@
-let homeMarketContext = null;
+let homeMarketContext = {};
 let homeConversation = [];
 
 function onAuthReady() {
@@ -18,10 +18,12 @@ async function loadHomeTicker() {
   const target = document.getElementById("homeTicker");
   if (!target) return;
   try {
-    const response = await fetch("/api/stock-rankings?type=value");
+    const response = await fetch("/api/stock-list");
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "시장 데이터를 불러오지 못했습니다.");
-    const stocks = (payload.items || []).slice(0, 6);
+    if (!response.ok) throw new Error(payload.error || "금융위 V2 시장 데이터를 불러오지 못했습니다.");
+    const stocks = (payload.items || []).slice().sort(function (a, b) {
+      return Number(b.tradingValue || 0) - Number(a.tradingValue || 0);
+    }).slice(0, 6);
     if (!stocks.length) throw new Error("시장 종목 정보가 없습니다.");
     const cards = stocks.map(function (stock) {
       const price = Number(stock.price || 0);
@@ -69,6 +71,7 @@ function bindStockBot() {
     event.preventDefault();
     const question = input.value.trim();
     if (!question) return;
+    const requestedAsset = getBotAssetType(question);
     appendBotMessage(question, "user-message");
     input.value = "";
     const button = document.getElementById("aiRecommendBtn");
@@ -77,14 +80,15 @@ function bindStockBot() {
     if (status) status.textContent = "시장 데이터 분석 중";
     const pending = appendBotMessage("시장 지표와 추세 데이터를 확인하고 있습니다…", "bot-message is-pending");
     try {
-      if (!homeMarketContext) homeMarketContext = await loadHomeMarketContext();
-      const prompt = buildHomeAnalysisPrompt(question, homeMarketContext);
+      if (!homeMarketContext[requestedAsset]) homeMarketContext[requestedAsset] = await loadHomeMarketContext(question, requestedAsset);
+      const context = homeMarketContext[requestedAsset];
+      const prompt = buildHomeAnalysisPrompt(question, context);
       const answer = await askAI(prompt);
       pending.textContent = answer;
       pending.classList.remove("is-pending");
       homeConversation.push({ question: question, answer: answer });
       homeConversation = homeConversation.slice(-5);
-      if (status) status.textContent = "데이터 기준 " + homeMarketContext.asOf + " · 학습용 분석";
+      if (status) status.textContent = "금융위 V2 " + context.asOf + " 기준 · 학습용 분석";
     } catch (error) {
       pending.textContent = "분석 오류: " + (error.message || "Groq API 키, 시장 데이터 API, 서버 실행 상태를 확인해 주세요.");
       pending.classList.remove("is-pending");
@@ -105,16 +109,22 @@ function appendBotMessage(text, className) {
   return item;
 }
 
-async function loadHomeMarketContext() {
-  const types = ["rise", "fall", "value"];
-  const responses = await Promise.all(types.map(async function (type) {
-    const response = await fetch("/api/stock-rankings?type=" + type);
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "시장 순위 API에 연결할 수 없습니다.");
-    return payload;
-  }));
-  const rankings = {};
-  types.forEach(function (type, index) { rankings[type] = responses[index].items || []; });
+function getBotAssetType(question) {
+  return question.includes("인수권증서") ? "rightCertificates"
+    : question.includes("신주인수권") ? "preemptiveRights"
+      : question.includes("수익증권") ? "securities" : "stocks";
+}
+
+async function loadHomeMarketContext(question, asset) {
+  const response = await fetch("/api/stock-list?asset=" + encodeURIComponent(asset));
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "금융위 V2 시장 자료를 불러오지 못했습니다.");
+  const items = payload.items || [];
+  const rankings = {
+    rise: items.slice().sort(function (a, b) { return Number(b.changeRate || 0) - Number(a.changeRate || 0); }).slice(0, 10),
+    fall: items.slice().sort(function (a, b) { return Number(a.changeRate || 0) - Number(b.changeRate || 0); }).slice(0, 10),
+    value: items.slice().sort(function (a, b) { return Number(b.tradingValue || 0) - Number(a.tradingValue || 0); }).slice(0, 10),
+  };
   const candidates = [];
   ["rise", "fall", "value"].forEach(function (type) {
     rankings[type].slice(0, 2).forEach(function (stock) {
@@ -123,7 +133,7 @@ async function loadHomeMarketContext() {
   });
   const histories = await Promise.all(candidates.slice(0, 5).map(async function (stock) {
     try {
-      const response = await fetch("/api/stock-history?code=" + encodeURIComponent(stock.code) + "&period=1m");
+      const response = await fetch("/api/stock-history?code=" + encodeURIComponent(stock.code) + "&period=1m&asset=" + encodeURIComponent(asset));
       if (!response.ok) return { code: stock.code, items: [] };
       const payload = await response.json();
       return { code: stock.code, items: payload.items || [] };
@@ -131,10 +141,11 @@ async function loadHomeMarketContext() {
       return { code: stock.code, items: [] };
     }
   }));
-  const tradeDate = Object.values(rankings).flat().map(function (stock) { return String(stock.tradeDate || ""); }).filter(Boolean).sort().pop();
+  const tradeDate = payload.updatedAt || Object.values(rankings).flat().map(function (stock) { return String(stock.tradeDate || ""); }).filter(Boolean).sort().pop();
   return {
     asOf: tradeDate ? tradeDate.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1.$2.$3") : "기준 시각 확인 필요",
-    source: responses.map(function (entry) { return entry.source || "금융위원회 주식시세정보"; })[0],
+    source: payload.source || "금융위원회 V2 주식시세정보",
+    asset: payload.asset || asset,
     rankings: rankings,
     histories: histories,
   };
@@ -162,7 +173,7 @@ function buildHomeAnalysisPrompt(question, context) {
   }).filter(Boolean);
 
   return [
-    "역할: 금융시장 데이터 분석가. 아래는 " + context.asOf + " 기준 " + context.source + "의 공개 종가/거래 데이터이며 실시간 시세가 아닐 수 있다.",
+    "역할: 금융시장 데이터 분석가. 아래는 " + context.asOf + " 기준 " + context.source + "의 " + context.asset + " 데이터(종가/거래 데이터)이며 실시간 시세가 아닐 수 있다.",
     "사용자 질문: " + question,
     "이전 대화: " + (homeConversation.length ? homeConversation.slice(-3).map(function (turn) { return "사용자: " + turn.question + " / 분석가: " + turn.answer; }).join("\n") : "첫 질문"),
     "시장 스냅샷: " + data.join("\n"),

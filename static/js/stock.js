@@ -8,6 +8,7 @@ const STOCK_SAMPLE_DATA = [
 
 let currentStock = null;
 let activePeriod = "1d";
+let activeAssetType = "stocks";
 
 function onAuthReady() {
   // Public stock detail data is loaded independently of login state.
@@ -24,15 +25,21 @@ function getPublicStockFallback(code) {
 async function loadStockDetails() {
   const code = getStockCodeFromQuery();
   try {
-    const response = await fetch("/api/stock-price?code=" + encodeURIComponent(code));
+    const response = await fetch("/api/stock-price?code=" + encodeURIComponent(code) + "&asset=" + encodeURIComponent(activeAssetType));
     if (!response.ok) throw new Error("quote api unavailable");
     currentStock = await response.json();
   } catch (error) {
-    currentStock = await loadBrowserQuote(code) || getPublicStockFallback(code);
+    currentStock = activeAssetType === "stocks" ? await loadBrowserQuote(code) || getPublicStockFallback(code) : null;
   }
-  renderStockHeader(currentStock);
-  renderPriceDetail(currentStock);
+  if (currentStock) {
+    renderStockHeader(currentStock);
+    renderPriceDetail(currentStock);
+  } else {
+    const message = document.getElementById("stockChartMessage");
+    if (message) message.textContent = "선택한 V2 데이터 유형에서 이 종목을 찾지 못했습니다. 유형별 종목 코드로 다시 시도해 주세요.";
+  }
   bindPeriodButtons();
+  bindAssetTypePicker();
   loadStockHistory(activePeriod);
 }
 
@@ -105,6 +112,16 @@ function bindPeriodButtons() {
   });
 }
 
+function bindAssetTypePicker() {
+  const picker = document.getElementById("stockAssetType");
+  if (!picker || picker.dataset.bound) return;
+  picker.dataset.bound = "true";
+  picker.addEventListener("change", function () {
+    activeAssetType = picker.value;
+    loadStockDetails();
+  });
+}
+
 async function loadStockHistory(period) {
   const code = getStockCodeFromQuery();
   const message = document.getElementById("stockChartMessage");
@@ -112,7 +129,7 @@ async function loadStockHistory(period) {
   const svg = document.getElementById("stockHistoryChart");
   if (svg) svg.innerHTML = "";
   try {
-    const response = await fetch("/api/stock-history?code=" + encodeURIComponent(code) + "&period=" + encodeURIComponent(period));
+    const response = await fetch("/api/stock-history?code=" + encodeURIComponent(code) + "&period=" + encodeURIComponent(period) + "&asset=" + encodeURIComponent(activeAssetType));
     if (!response.ok) throw new Error("history endpoint unavailable");
     const payload = await response.json();
     renderStockHistory(payload.items || [], period);

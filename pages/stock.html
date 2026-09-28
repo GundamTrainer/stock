@@ -55,6 +55,14 @@
 
     <section class="stock-history-panel card" aria-label="종목 가격 추세">
       <div class="history-heading"><div><span class="kicker">PRICE HISTORY</span><h2>가격 추세</h2><p id="chartDataNote">거래일 종가 데이터 · 실시간 분봉이 아닙니다.</p></div><strong id="stockRangeChange">—</strong></div>
+      <label class="asset-type-picker">금융상품 유형
+        <select id="stockAssetType">
+          <option value="stocks">주식</option>
+          <option value="securities">수익증권</option>
+          <option value="preemptiveRights">신주인수권증권</option>
+          <option value="rightCertificates">신주인수권증서</option>
+        </select>
+      </label>
       <div class="stock-range-tabs" role="group" aria-label="차트 기간 선택">
         <button type="button" data-period="1d" class="active" aria-pressed="true">1일</button>
         <button type="button" data-period="1w" aria-pressed="false">1주</button>
