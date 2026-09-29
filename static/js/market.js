@@ -7,24 +7,11 @@ const RANKING_TARGETS = {
 
 let portfolioCache = null;
 
-const PUBLIC_MARKET_ITEMS = [
-  { code: "005930", name: "삼성전자", sector: "디스플레이", price: 73200, change: 1500, changeRate: 2.09, volume: 15400000, tradingValue: 1124000000000, tradeDate: "20260621" },
-  { code: "000660", name: "SK하이닉스", sector: "디스플레이", price: 194500, change: -3200, changeRate: -1.62, volume: 8400000, tradingValue: 1630000000000, tradeDate: "20260621" },
-  { code: "035420", name: "NAVER", sector: "출판·플랫폼", price: 251500, change: 4800, changeRate: 1.95, volume: 2700000, tradingValue: 678000000000, tradeDate: "20260621" },
-  { code: "051910", name: "LG화학", sector: "화학", price: 578000, change: 9300, changeRate: 1.64, volume: 750000, tradingValue: 432000000000, tradeDate: "20260621" },
-  { code: "207940", name: "삼성바이오로직스", sector: "생명과학", price: 795000, change: -11000, changeRate: -1.36, volume: 620000, tradingValue: 492000000000, tradeDate: "20260621" },
-  { code: "068270", name: "셀트리온", sector: "생명과학", price: 176500, change: 2300, changeRate: 1.32, volume: 4600000, tradingValue: 812000000000, tradeDate: "20260621" },
-  { code: "035720", name: "카카오", sector: "게임·콘텐츠", price: 56800, change: 1200, changeRate: 2.16, volume: 13200000, tradingValue: 749000000000, tradeDate: "20260621" },
-  { code: "012330", name: "현대모비스", sector: "자동차", price: 255500, change: 3400, changeRate: 1.35, volume: 2500000, tradingValue: 639000000000, tradeDate: "20260621" },
-  { code: "033780", name: "KT&G", sector: "소비재", price: 102800, change: -1200, changeRate: -1.15, volume: 3900000, tradingValue: 401000000000, tradeDate: "20260621" },
-  { code: "090430", name: "아모레퍼시픽", sector: "소비재", price: 171200, change: 2600, changeRate: 1.54, volume: 2400000, tradingValue: 410000000000, tradeDate: "20260621" },
-  { code: "066570", name: "LG전자", sector: "전자·가전", price: 120500, change: -900, changeRate: -0.74, volume: 5400000, tradingValue: 651000000000, tradeDate: "20260621" },
-  { code: "055550", name: "신한지주", sector: "금융", price: 45200, change: 580, changeRate: 1.30, volume: 8100000, tradingValue: 366000000000, tradeDate: "20260621" },
-];
-
 let rankingCache = [];
 let marketCache = [];
+let marketDataPromise = null;
 let selectedStock = null;
+let portfolioVersion = 0;
 
 function onAuthReady() {
   loadMarketSummary();
@@ -41,13 +28,16 @@ async function loadPortfolioState() {
     renderPortfolioState();
     return;
   }
+  const requestVersion = portfolioVersion;
   const { data, error } = await db.rpc("stock_arena_get_portfolio");
+  if (requestVersion !== portfolioVersion) return;
   if (error) {
     console.error("포트폴리오 조회 실패:", error);
     setTradeStatus(formatSupabaseTradeError(error));
     return;
   }
   portfolioCache = data;
+  syncPortfolioPrices(marketCache);
   renderPortfolioState();
 }
 
@@ -71,7 +61,7 @@ function normalizePublicMarketItem(item) {
   return {
     code: String(code),
     name: String(name),
-    sector: String(item.sector || item.mrktCtg || item.category || "시장"),
+    sector: normalizeMarketCategory(item.sector || item.mrktCtg || item.category),
     price: Number.isFinite(price) ? price : 0,
     change: Number.isFinite(change) ? change : 0,
     changeRate: Number.isFinite(changeRate) ? changeRate : 0,
@@ -80,6 +70,11 @@ function normalizePublicMarketItem(item) {
     tradeDate,
     updatedAt: tradeDate,
   };
+}
+
+function normalizeMarketCategory(value) {
+  const category = String(value || "").trim().toUpperCase();
+  return ["KOSPI", "KOSDAQ", "KONEX"].includes(category) ? category : "기타";
 }
 
 function buildSyntheticTrend(basePrice, variation = 0.03) {
@@ -121,16 +116,35 @@ async function loadPublicMarketData() {
   if (marketCache.length) {
     return marketCache;
   }
+  if (!marketDataPromise) {
+    marketDataPromise = (async function () {
+      const response = await fetch("/api/stock-list");
+      let payload = {};
+      try { payload = await response.json(); } catch (error) { /* Report a stable API message below. */ }
+      if (!response.ok) throw new Error(payload.error || "금융위 V2 종목 목록 API 요청 실패 (" + response.status + ")");
+      marketCache = (payload.items || []).map(normalizePublicMarketItem).filter(function (item) {
+        return item.code && item.name && item.price > 0;
+      });
+      if (!marketCache.length) throw new Error("금융위 V2 종목 목록에서 거래 가능한 종목이 없습니다.");
+      syncPortfolioPrices(marketCache);
+      return marketCache;
+    })();
+  }
+  try {
+    return await marketDataPromise;
+  } finally {
+    marketDataPromise = null;
+  }
+}
 
-  const response = await fetch("/api/stock-list");
-  let payload = {};
-  try { payload = await response.json(); } catch (error) { /* Report a stable API message below. */ }
-  if (!response.ok) throw new Error(payload.error || "금융위 V2 종목 목록 API 요청 실패 (" + response.status + ")");
-  marketCache = (payload.items || []).map(normalizePublicMarketItem).filter(function (item) {
-    return item.code && item.name && item.price > 0;
+function syncPortfolioPrices(items) {
+  if (!portfolioCache || !portfolioCache.holdings || !items || !items.length) return;
+  const prices = new Map(items.map(function (item) { return [String(item.code), Number(item.price)]; }));
+  Object.values(portfolioCache.holdings).forEach(function (holding) {
+    const latestPrice = prices.get(String(holding.code));
+    if (Number.isFinite(latestPrice) && latestPrice > 0) holding.price = latestPrice;
   });
-  if (!marketCache.length) throw new Error("금융위 V2 종목 목록에서 거래 가능한 종목이 없습니다.");
-  return marketCache;
+  renderPortfolioState();
 }
 
 async function loadMarketSummary() {
@@ -452,16 +466,18 @@ function renderPortfolioState() {
   let totalMarketValue = 0;
   const rows = holdings.map(function (holding) {
     const price = Number(holding.price || 0);
+    const averagePrice = Number(holding.averagePrice || price);
     const value = price * Number(holding.qty || 0);
+    const unrealizedProfit = (price - averagePrice) * Number(holding.qty || 0);
     totalMarketValue += value;
-    return '<div class="holding-row"><div><strong>' + holding.name + '</strong><small>' + holding.qty + '주 · 평균 단가 ' + formatWon(holding.averagePrice || price) + '</small></div><div><strong>' + formatWon(value) + '</strong></div></div>';
+    return '<div class="holding-row"><div><strong>' + escapeMarketHtml(holding.name) + '</strong><small>' + holding.qty + '주 · 현재 ' + formatWon(price) + ' · 평균 ' + formatWon(averagePrice) + '</small></div><div><strong>' + formatWon(value) + '</strong><small class="' + (unrealizedProfit >= 0 ? 'profit-positive' : 'profit-negative') + '">평가손익 ' + formatSignedWon(unrealizedProfit) + '</small></div></div>';
   }).join("");
 
   if (portfolioList) {
     portfolioList.innerHTML = rows || '<div class="holding-row"><div><strong>보유 종목 없음</strong></div></div>';
   }
 
-  const totalAssets = state.cash + totalMarketValue;
+  const totalAssets = Number(state.cash || 0) + totalMarketValue;
   const invested = Object.values(state.holdings || {}).reduce(function (sum, holding) {
     return sum + Number(holding.averagePrice || holding.price || 0) * Number(holding.qty || 0);
   }, 0);
@@ -512,7 +528,9 @@ async function executeTrade(mode) {
     setTradeStatus(formatSupabaseTradeError(error));
     return;
   }
+  portfolioVersion += 1;
   portfolioCache = data;
+  syncPortfolioPrices(marketCache);
   renderPortfolioState();
   setTradeStatus(selectedStock.name + " " + qty + "주 " + (mode === "buy" ? "매수" : "매도") + " 완료 · 계정에 저장됨");
 }
@@ -546,6 +564,15 @@ function formatPrice(value) {
 
 function formatWon(value) {
   return "₩" + Number(value).toLocaleString("ko-KR");
+}
+
+function formatSignedWon(value) {
+  const amount = Number(value);
+  return (amount >= 0 ? "+" : "−") + "₩" + Math.abs(amount).toLocaleString("ko-KR");
+}
+
+function escapeMarketHtml(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 function formatVolume(value) {

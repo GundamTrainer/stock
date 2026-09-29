@@ -23,8 +23,8 @@
       <article class="market-summary-card"><span>KOSPI</span><strong id="kospiValue">-</strong><small id="kospiChange">데이터 연결 대기</small></article>
       <article class="market-summary-card"><span>KOSDAQ</span><strong id="kosdaqValue">-</strong><small id="kosdaqChange">데이터 연결 대기</small></article>
       <article class="market-summary-card"><span>자산</span><strong id="portfolioValue">₩0</strong><small id="portfolioSummary">보유 종목 없음</small></article>
-      <article class="market-summary-card metric-profit"><span>보유 평가 이익</span><strong id="profitToday">₩0</strong><small>저장 시세와 평균 매수가 비교</small></article>
-      <article class="market-summary-card metric-loss"><span>보유 평가 손실</span><strong id="lossToday">₩0</strong><small>저장 시세와 평균 매수가 비교</small></article>
+      <article class="market-summary-card metric-profit"><span>보유 평가 이익</span><strong id="profitToday">₩0</strong><small>최신 거래일 시세와 평균 매수가 비교</small></article>
+      <article class="market-summary-card metric-loss"><span>보유 평가 손실</span><strong id="lossToday">₩0</strong><small>최신 거래일 시세와 평균 매수가 비교</small></article>
     </section>
 
     <section class="market-toolbar" aria-label="종목 검색">
@@ -34,14 +34,11 @@
       <a class="btn compact-button" href="./stocks.html">전체 종목 보기</a>
     </section>
 
-    <nav class="sector-tabs" aria-label="업종별 종목">
+    <nav class="sector-tabs" aria-label="시장별 종목">
       <a class="sector-tab active" href="./stocks.html">전체</a>
-      <a class="sector-tab" href="./stocks.html?sector=화학">화학</a>
-      <a class="sector-tab" href="./stocks.html?sector=생명과학">생명과학</a>
-      <a class="sector-tab" href="./stocks.html?sector=디스플레이">디스플레이</a>
-      <a class="sector-tab" href="./stocks.html?sector=출판·플랫폼">출판·플랫폼</a>
-      <a class="sector-tab" href="./stocks.html?sector=게임·콘텐츠">게임·콘텐츠</a>
-      <a class="sector-tab" href="./stocks.html?sector=금융">금융</a>
+      <a class="sector-tab" href="./stocks.html?sector=KOSPI">KOSPI</a>
+      <a class="sector-tab" href="./stocks.html?sector=KOSDAQ">KOSDAQ</a>
+      <a class="sector-tab" href="./stocks.html?sector=KONEX">KONEX</a>
     </nav>
 
     <section class="market-main-grid">
@@ -55,7 +52,7 @@
             <strong id="detailStockName">종목 선택</strong>
             <span id="detailStockCode" class="data-badge data-badge-blue">-</span>
           </div>
-          <small id="detailSector" class="stock-sector">업종 미선택</small>
+          <small id="detailSector" class="stock-sector">시장 미선택</small>
           <div class="stock-detail-body">
             <div class="stock-detail-price" id="detailPrice">-</div>
             <div class="stock-detail-rate" id="detailRate">0.00%</div>

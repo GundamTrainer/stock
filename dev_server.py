@@ -77,6 +77,7 @@ def normalize_stock(row):
     if not re.fullmatch(r"\d{6}", raw_code):
         isin = str(row.get("isinCd") or "")
         raw_code = isin[3:9] if isin.startswith("KR") and len(isin) >= 9 and isin[3:9].isdigit() else raw_code
+    market_category = str(row.get("mrktCtg") or row.get("market") or row.get("marketCategory") or "").strip().upper()
     return {
         "code": raw_code,
         "name": str(row.get("itmsNm") or row.get("stockName") or row.get("stockNm") or row.get("name") or raw_code),
@@ -88,7 +89,7 @@ def normalize_stock(row):
         "low": as_number(row.get("lopr", row.get("low", 0))),
         "volume": as_number(row.get("acmlVol", row.get("trqu", row.get("volume", 0)))),
         "tradingValue": as_number(row.get("trPrc", row.get("trPrc", row.get("acmlTrPbmn", row.get("tradingValue", row.get("dealAmt", 0)))))),
-        "sector": str(row.get("mrktCtg") or row.get("sector") or "시장"),
+        "sector": market_category if market_category in {"KOSPI", "KOSDAQ", "KONEX"} else "기타",
         "tradeDate": str(row.get("basDt") or row.get("tradeDate") or row.get("date") or ""),
         "updatedAt": str(row.get("basDt") or row.get("tradeDate") or row.get("date") or ""),
         "isRealtime": False,

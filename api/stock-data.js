@@ -92,11 +92,12 @@ export function normalizePublicStockItem(item, fallbackCode) {
   const tradingValue = parseNumber(pickFirst(item, ["trPrc", "acmlTrPbmn", "tradingValue", "value", "dealAmt", "trvAmt", "amt"]));
   const change = parseNumber(pickFirst(item, ["vs", "vsprc", "change", "prdy_vrss", "diff", "delta"]));
   const changeRate = parseNumber(pickFirst(item, ["fltRt", "fltrt", "changeRate", "prdy_ctrt", "chgRate", "fluctuationRate", "rate"]));
+  const marketCategory = String(pickFirst(item, ["mrktCtg", "market", "marketCategory"]) || "").trim().toUpperCase();
 
   return {
     code: String(code),
     name: String(name || code || "종목명 없음"),
-    sector: String(pickFirst(item, ["mrktCtg", "sector", "category"]) || "시장"),
+    sector: ["KOSPI", "KOSDAQ", "KONEX"].includes(marketCategory) ? marketCategory : "기타",
     price: price === null ? 0 : price,
     change: change === null ? 0 : change,
     changeRate: changeRate === null ? 0 : changeRate,

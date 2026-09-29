@@ -1,28 +1,38 @@
-const CATALOG_SECTORS = ["전체", "화학", "생명과학", "디스플레이", "출판·플랫폼", "게임·콘텐츠", "자동차", "소비재", "전자·가전", "금융"];
+const KNOWN_MARKETS = ["KOSPI", "KOSDAQ", "KONEX"];
 
 function onAuthReady() {
   loadPublicMarketData().then(function (items) {
     const params = new URLSearchParams(location.search);
-    renderCatalogTabs(params.get("sector") || "전체");
+    const requestedMarket = params.get("sector") || "전체";
+    const availableMarkets = getAvailableMarkets(items);
+    const activeMarket = requestedMarket === "전체" || availableMarkets.includes(requestedMarket) ? requestedMarket : "전체";
+    renderCatalogTabs(activeMarket, availableMarkets);
     bindCatalogSearch(items);
-    renderCatalog(items, params.get("sector") || "전체", "");
+    renderCatalog(items, activeMarket, "");
   }).catch(function (error) {
     const grid = document.getElementById("catalogGrid");
     if (grid) grid.innerHTML = '<div class="ranking-state is-error">' + escapeCatalogValue(error.message || "주식 데이터를 불러오지 못했습니다.") + '</div>';
   });
 }
 
-function renderCatalogTabs(activeSector) {
+function getAvailableMarkets(items) {
+  const presentMarkets = new Set(items.map(function (item) { return item.sector; }));
+  const known = KNOWN_MARKETS.filter(function (market) { return presentMarkets.has(market); });
+  const other = Array.from(presentMarkets).filter(function (market) { return market && !KNOWN_MARKETS.includes(market); }).sort();
+  return known.concat(other);
+}
+
+function renderCatalogTabs(activeMarket, availableMarkets) {
   const tabs = document.getElementById("catalogTabs");
   if (!tabs) return;
-  tabs.innerHTML = CATALOG_SECTORS.map(function (sector) {
-    return '<button type="button" class="sector-tab ' + (sector === activeSector ? "active" : "") + '" data-sector="' + sector + '">' + sector + '</button>';
+  tabs.innerHTML = ["전체"].concat(availableMarkets).map(function (market) {
+    return '<button type="button" class="sector-tab ' + (market === activeMarket ? "active" : "") + '" data-market="' + market + '">' + market + '</button>';
   }).join("");
   tabs.querySelectorAll("button").forEach(function (button) {
     button.addEventListener("click", function () {
       tabs.querySelectorAll("button").forEach(function (item) { item.classList.remove("active"); });
       button.classList.add("active");
-      renderCatalog(marketCache, button.dataset.sector, document.getElementById("catalogSearch").value);
+      renderCatalog(marketCache, button.dataset.market, document.getElementById("catalogSearch").value);
     });
   });
 }
@@ -32,7 +42,7 @@ function bindCatalogSearch(items) {
   if (!input) return;
   input.addEventListener("input", function () {
     const active = document.querySelector("#catalogTabs .active");
-    renderCatalog(items, active ? active.dataset.sector : "전체", input.value);
+    renderCatalog(items, active ? active.dataset.market : "전체", input.value);
   });
 }
 

@@ -8,21 +8,32 @@ function onAuthReady() {
 
 async function loadTradingJournal() {
   const target = document.getElementById("tradeRecords");
-  const { data, error } = await db.from("stock_arena_trades").select("*").eq("user_id", currentUser.id).order("created_at", { ascending: true }).limit(500);
-  if (error) {
-    console.error("거래 기록을 불러오지 못했습니다:", error);
-    if (target) target.innerHTML = '<tr><td colspan="7">Supabase 거래 스키마를 설정하면 계정별 거래 기록이 표시됩니다.</td></tr>';
-    return;
+  const pageSize = 500;
+  const history = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await db.from("stock_arena_trades")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) {
+      console.error("거래 기록을 불러오지 못했습니다:", error);
+      if (target) target.innerHTML = '<tr><td colspan="7">Supabase 거래 스키마를 설정하면 계정별 거래 기록이 표시됩니다.</td></tr>';
+      return;
+    }
+    history.push(...(data || []));
+    if (!data || data.length < pageSize) break;
   }
-  const history = data || [];
   const bought = history.filter(function (trade) { return trade.mode === "buy"; }).reduce(function (sum, trade) { return sum + Number(trade.total || 0); }, 0);
   const sold = history.filter(function (trade) { return trade.mode === "sell"; }).reduce(function (sum, trade) { return sum + Number(trade.total || 0); }, 0);
-  const profit = history.reduce(function (sum, trade) { return sum + Number(trade.realized_profit || 0); }, 0);
+  const realizedProfit = history.reduce(function (sum, trade) { return sum + Number(trade.realized_profit || 0); }, 0);
+  const unrealizedProfit = await loadUnrealizedProfit();
+  const totalProfit = realizedProfit + unrealizedProfit;
   const levels = [{ name: "BRONZE", title: "브론즈 투자자", threshold: 0 }, { name: "SILVER", title: "실버 투자자", threshold: 100000 }, { name: "GOLD", title: "골드 투자자", threshold: 500000 }, { name: "PLATINUM", title: "플래티넘 투자자", threshold: 1500000 }, { name: "MASTER", title: "마스터 투자자", threshold: 5000000 }];
   let current = levels[0];
   let next = levels[1];
-  levels.forEach(function (level, index) { if (profit >= level.threshold) { current = level; next = levels[index + 1] || null; } });
-  const progress = next ? Math.min(100, Math.max(0, ((profit - current.threshold) / (next.threshold - current.threshold)) * 100) || 0) : 100;
+  levels.forEach(function (level, index) { if (realizedProfit >= level.threshold) { current = level; next = levels[index + 1] || null; } });
+  const progress = next ? Math.min(100, Math.max(0, ((realizedProfit - current.threshold) / (next.threshold - current.threshold)) * 100) || 0) : 100;
   const badge = document.getElementById("rankBadge");
   badge.className = "rank-badge rank-" + current.name.toLowerCase();
   badge.setAttribute("aria-label", current.title);
@@ -30,12 +41,37 @@ async function loadTradingJournal() {
   document.getElementById("rankTitle").textContent = current.title;
   document.getElementById("rankDescription").textContent = next ? "꾸준한 기록과 리스크 관리로 다음 단계에 도전하세요." : "최고 등급에 도달했습니다.";
   document.getElementById("rankProgressBar").style.width = progress + "%";
-  document.getElementById("rankNext").textContent = next ? "다음 등급까지 " + formatRankWon(Math.max(0, next.threshold - profit)) : "최고 등급 달성";
+  document.getElementById("rankNext").textContent = next ? "실현손익 기준 다음 등급까지 " + formatRankWon(Math.max(0, next.threshold - realizedProfit)) : "최고 등급 달성";
   document.getElementById("totalBought").textContent = formatRankWon(bought);
   document.getElementById("totalSold").textContent = formatRankWon(sold);
-  document.getElementById("totalProfit").textContent = formatRankWon(profit);
+  document.getElementById("totalProfit").textContent = formatRankWon(totalProfit);
   renderTradeRecords(history);
   renderTradingHistoryChart(history);
+}
+
+async function loadUnrealizedProfit() {
+  try {
+    const { data: portfolio, error } = await db.rpc("stock_arena_get_portfolio");
+    if (error || !portfolio || !portfolio.holdings) return 0;
+
+    const response = await fetch("/api/stock-list", { headers: { Accept: "application/json" } });
+    if (!response.ok) return 0;
+    const payload = await response.json();
+    const latestPrices = new Map((payload.items || []).map(function (item) {
+      return [String(item.code || item.srtnCd || ""), Number(item.price || item.clpr || 0)];
+    }));
+
+    return Object.values(portfolio.holdings).reduce(function (sum, holding) {
+      const code = String(holding.code || "");
+      const quote = latestPrices.get(code);
+      const price = Number.isFinite(quote) && quote > 0 ? quote : Number(holding.price || 0);
+      const averagePrice = Number(holding.averagePrice || price);
+      return sum + (price - averagePrice) * Number(holding.qty || 0);
+    }, 0);
+  } catch (error) {
+    console.error("보유 종목 평가손익을 불러오지 못했습니다:", error);
+    return 0;
+  }
 }
 
 function renderTradeRecords(history) {
