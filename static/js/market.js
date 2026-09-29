@@ -189,13 +189,20 @@ async function loadAllRankings() {
 
   results.forEach(function (result, index) {
     if (result.status === "rejected") {
-      showError(RANKING_TARGETS[Object.keys(RANKING_TARGETS)[index]], "공공데이터 기반 시장 정보를 확인하지 못했습니다.");
+      const errorMessage = result.reason && result.reason.message
+        ? result.reason.message
+        : "공공데이터 기반 시장 정보를 확인하지 못했습니다.";
+      showError(RANKING_TARGETS[Object.keys(RANKING_TARGETS)[index]], errorMessage);
     }
   });
 
-  const items = await loadPublicMarketData();
-  if (items.length && !selectedStock) {
-    setSelectedStock(items[0]);
+  try {
+    const items = await loadPublicMarketData();
+    if (items.length && !selectedStock) {
+      setSelectedStock(items[0]);
+    }
+  } catch (error) {
+    console.error("시장 종목 데이터를 불러오지 못했습니다:", error);
   }
 }
 
