@@ -51,66 +51,11 @@ async function loadPortfolioState() {
   renderPortfolioState();
 }
 
-function getPublicApiKey() {
-  return (window.PUBLIC_DATA_GO_KR_API_KEY || "").trim();
-}
-
-function buildIndexRequestUrl(endpoint, params) {
-  const apiKey = getPublicApiKey();
-  if (!apiKey) {
-    throw new Error("PUBLIC_DATA_GO_KR_API_KEY missing");
-  }
-
-  const url = new URL(endpoint);
-  url.search = new URLSearchParams({
-    serviceKey: apiKey,
-    resultType: "json",
-    pageNo: "1",
-    numOfRows: "5",
-    ...params,
-  }).toString();
-  return url.toString();
-}
-
 async function loadPublicIndexSummary() {
-  const endpoint = window.PUBLIC_DATA_GO_KR_INDEX_URL || "https://apis.data.go.kr/1160100/service/GetIndexInfoService/getIndexInfo";
-  const indexNames = ["KOSPI", "KOSDAQ"];
-
-  const results = await Promise.all(indexNames.map(async function (label) {
-    const response = await fetch(buildIndexRequestUrl(endpoint, { IDX_NM: label }), {
-      headers: { Accept: "application/json" },
-    });
-
-    if (!response.ok) {
-      throw new Error(label + " index fetch failed: " + response.status);
-    }
-
-    const payload = await response.json();
-    const items = payload?.response?.body?.items?.item || payload?.response?.body?.item || [];
-    const item = Array.isArray(items) ? items[0] : items;
-    if (!item) {
-      return null;
-    }
-
-    const value = Number(item.clpr ?? item.close ?? item.idxClpr ?? 0);
-    const changeRate = Number(item.fltRt ?? item.changeRate ?? 0);
-
-    return {
-      label,
-      value: Number.isFinite(value) ? value : 0,
-      changeRate: Number.isFinite(changeRate) ? changeRate : 0,
-      updatedAt: item.basDt || new Date().toISOString().slice(0, 10),
-      name: item.idxNm || label,
-    };
-  }));
-
-  const map = {};
-  results.forEach(function (entry) {
-    if (!entry) return;
-    map[entry.label] = entry;
-  });
-
-  return map;
+  const response = await fetch("/api/market-summary", { headers: { Accept: "application/json" } });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "시장 지수 API 요청 실패");
+  return payload.indexes || {};
 }
 
 function normalizePublicMarketItem(item) {

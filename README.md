@@ -38,8 +38,18 @@ my-project/
 | `.env.local` (내 컴퓨터) | 나만 | `GROQ_API_KEY`, `DATA_GO_KR_API_KEY` |
 | Vercel 환경변수 | 나만 | 위 서버 키와 같은 값 |
 
-`.env.local` 은 깃에 안 올라가므로 **Vercel에는 따로 등록해야 합니다.**
-Settings → Environment Variables 에 넣고 **Redeploy** 까지 해야 반영됩니다.
+`.env.local` 은 깃에 안 올라가므로 **Vercel에는 따로 등록해야 합니다.** GitHub 연동만으로 로컬 환경변수가 전송되지는 않습니다.
+
+Vercel에서 프로젝트를 열고 **Settings → Environment Variables**에 다음 변수를 등록하세요. 값은 로컬 `.env.local`에 있는 값과 동일하게 입력하되, 이 저장소나 브라우저 코드에는 넣지 않습니다.
+
+| 변수명 | 필요한 기능 |
+|---|---|
+| `DATA_GO_KR_API_KEY` | 시세·종목·시장지수 조회 |
+| `GROQ_API_KEY` | AI 종목 챗봇 |
+
+각 변수를 Production(필요하면 Preview/Development도)에 추가한 다음 **Deployments → 최신 배포 → Redeploy**를 실행하세요. 환경변수 변경은 이미 배포된 사이트에 자동 반영되지 않습니다. 로컬 설정은 `.env.example`을 참고해 루트의 `.env.local`에 저장합니다.
+
+> 보안: 이전 버전의 `static/js/public-data-config.js`에는 data.go.kr 인증키가 브라우저에 노출된 상태였습니다. 코드는 해당 키 사용을 제거했으므로, 기존 키는 data.go.kr에서 폐기/재발급한 뒤 새 키를 Vercel과 `.env.local`에 등록하세요.
 
 ## 실제 실행 방법
 

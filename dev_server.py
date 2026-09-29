@@ -159,6 +159,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.stock_list(query)
         if route == "/api/stock-price":
             return self.stock_price(query)
+        if route == "/api/market-summary":
+            return self.market_summary()
         if route == "/api/stock-history":
             return self.stock_history(query)
         self.serve_static(route)
@@ -286,6 +288,37 @@ class Handler(BaseHTTPRequestHandler):
             match["source"] = "금융위원회 V2 시세정보"
             match["asset"] = asset
             return send_json(self, 200, match)
+        except Exception as error:
+            return send_json(self, 502, {"error": public_data_error(error)})
+
+    def market_summary(self):
+        key = os.environ.get("DATA_GO_KR_API_KEY", "").strip().strip("\"'")
+        if not key:
+            return send_json(self, 500, {"error": "DATA_GO_KR_API_KEY가 없습니다. 루트 .env.local 또는 Vercel 환경 변수를 설정하세요."})
+        endpoint = os.environ.get("DATA_GO_KR_INDEX_URL", "https://apis.data.go.kr/1160100/service/GetIndexInfoService/getIndexInfo")
+        indexes = {}
+        try:
+            for label in ("KOSPI", "KOSDAQ"):
+                params = urllib.parse.urlencode({
+                    "serviceKey": key, "resultType": "json", "pageNo": "1", "numOfRows": "5", "IDX_NM": label,
+                })
+                request = urllib.request.Request(endpoint + "?" + params, headers={"Accept": "application/json", "User-Agent": "StockArenaLocal/1.0"})
+                with urllib.request.urlopen(request, timeout=12) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                header = (payload.get("response") or {}).get("header") or {}
+                if header.get("resultCode") and str(header["resultCode"]) != "00":
+                    raise RuntimeError(header.get("resultMsg") or "공공데이터 응답 오류")
+                rows = api_items(payload)
+                if not rows:
+                    continue
+                row = rows[0]
+                indexes[label] = {
+                    "value": as_number(row.get("clpr", row.get("close", row.get("idxClpr", 0)))),
+                    "changeRate": as_number(row.get("fltRt", row.get("changeRate", 0))),
+                    "updatedAt": str(row.get("basDt") or datetime.now(timezone.utc).date().isoformat()),
+                    "name": str(row.get("idxNm") or label),
+                }
+            return send_json(self, 200, {"indexes": indexes})
         except Exception as error:
             return send_json(self, 502, {"error": public_data_error(error)})
 

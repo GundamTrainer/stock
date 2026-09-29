@@ -1,11 +1,3 @@
-const STOCK_SAMPLE_DATA = [
-  { code: "005930", name: "삼성전자", price: 73200, change: 1500, changeRate: 2.09, open: 71300, high: 73500, low: 70900, volume: 15400000, tradingValue: 1124000000000, updatedAt: "2026-06-21" },
-  { code: "000660", name: "SK하이닉스", price: 194500, change: -3200, changeRate: -1.62, open: 198800, high: 199900, low: 193600, volume: 8400000, tradingValue: 1630000000000, updatedAt: "2026-06-21" },
-  { code: "035420", name: "NAVER", price: 251500, change: 4800, changeRate: 1.95, open: 246500, high: 253000, low: 245900, volume: 2700000, tradingValue: 678000000000, updatedAt: "2026-06-21" },
-  { code: "051910", name: "LG화학", price: 578000, change: 9300, changeRate: 1.64, open: 569100, high: 581200, low: 566800, volume: 750000, tradingValue: 432000000000, updatedAt: "2026-06-21" },
-  { code: "035720", name: "카카오", price: 56800, change: 1200, changeRate: 2.16, open: 55500, high: 57000, low: 55200, volume: 13200000, tradingValue: 749000000000, updatedAt: "2026-06-21" },
-];
-
 let currentStock = null;
 let activePeriod = "1d";
 let activeAssetType = "stocks";
@@ -18,108 +10,28 @@ function getStockCodeFromQuery() {
   return new URLSearchParams(window.location.search).get("code") || "005930";
 }
 
-function getPublicStockFallback(code) {
-  return STOCK_SAMPLE_DATA.find(function (item) { return String(item.code) === String(code); }) || STOCK_SAMPLE_DATA[0];
-}
-
 async function loadStockDetails() {
   const code = getStockCodeFromQuery();
   try {
     const response = await fetch("/api/stock-price?code=" + encodeURIComponent(code) + "&asset=" + encodeURIComponent(activeAssetType));
-    if (!response.ok) throw new Error("quote api unavailable");
-    currentStock = await response.json();
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "시세 API 요청 실패");
+    currentStock = payload;
   } catch (error) {
-    currentStock = activeAssetType === "stocks" ? await loadBrowserQuote(code) || getPublicStockFallback(code) : null;
+    currentStock = null;
+    const message = document.getElementById("stockChartMessage");
+    if (message) message.textContent = error.message || "시세를 불러오지 못했습니다.";
   }
   if (currentStock) {
     renderStockHeader(currentStock);
     renderPriceDetail(currentStock);
   } else {
     const message = document.getElementById("stockChartMessage");
-    if (message) message.textContent = "선택한 V2 데이터 유형에서 이 종목을 찾지 못했습니다. 유형별 종목 코드로 다시 시도해 주세요.";
+    if (message && !message.textContent) message.textContent = "선택한 V2 데이터 유형에서 이 종목을 찾지 못했습니다. 유형별 종목 코드로 다시 시도해 주세요.";
   }
   bindPeriodButtons();
   bindAssetTypePicker();
   loadStockHistory(activePeriod);
-}
-
-async function loadBrowserQuote(code) {
-  const apiKey = (window.PUBLIC_DATA_GO_KR_API_KEY || "").trim();
-  if (!apiKey) return null;
-  try {
-    const url = new URL("https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo");
-    url.search = new URLSearchParams({ serviceKey: apiKey, resultType: "json", pageNo: "1", numOfRows: "10", ISU_CD: code }).toString();
-    const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
-    if (!response.ok) return null;
-    const payload = await response.json();
-    const raw = payload?.response?.body?.items?.item || payload?.response?.body?.item || [];
-    const item = Array.isArray(raw) ? raw[0] : raw;
-    if (!item) return null;
-    return {
-      code: item.shtCd || item.stkCd || item.isinCd || code,
-      name: item.itmsNm || item.stockName || "종목",
-      price: Number(item.clpr || item.close || item.price || 0),
-      change: Number(item.vs || item.change || 0),
-      changeRate: Number(item.fltRt || item.changeRate || 0),
-      open: Number(item.mkp || item.open || 0),
-      high: Number(item.hipr || item.high || 0),
-      low: Number(item.lopr || item.low || 0),
-      volume: Number(item.acmlVol || item.volume || 0),
-      tradingValue: Number(item.acmlTrPbmn || item.tradingValue || 0),
-      updatedAt: item.basDt || new Date().toLocaleDateString("ko-KR"),
-    };
-  } catch (error) {
-    return null;
-  }
-}
-
-function renderStockHeader(stock) {
-  const title = document.getElementById("stockTitle");
-  const price = document.getElementById("stockCurrentPrice");
-  const rate = document.getElementById("stockChangeRate");
-  const updated = document.getElementById("stockUpdatedAt");
-  if (title) title.textContent = stock.name || "종목 정보";
-  if (price) price.textContent = formatStockNumber(stock.price) + "원";
-  if (rate) {
-    const value = Number(stock.changeRate || 0);
-    rate.textContent = (value >= 0 ? "+" : "") + value.toFixed(2) + "%";
-    rate.className = "change-tag " + (value > 0 ? "up" : value < 0 ? "down" : "flat");
-  }
-  if (updated) updated.textContent = (stock.isRealtime === false ? "거래일 종가 · " : "기준 · ") + (stock.updatedAt || stock.tradeDate || "기준 시각 확인 필요");
-}
-
-function renderPriceDetail(stock) {
-  [
-    ["open", stock.open], ["high", stock.high], ["low", stock.low], ["price", stock.price],
-    ["volume", stock.volume], ["tradingValue", stock.tradingValue],
-  ].forEach(function (entry) {
-    const element = document.getElementById("detail-" + entry[0]);
-    if (element) element.textContent = entry[1] == null ? "-" : formatStockNumber(entry[1]);
-  });
-}
-
-function bindPeriodButtons() {
-  document.querySelectorAll(".stock-range-tabs button").forEach(function (button) {
-    button.addEventListener("click", function () {
-      activePeriod = button.dataset.period;
-      document.querySelectorAll(".stock-range-tabs button").forEach(function (item) {
-        const active = item === button;
-        item.classList.toggle("active", active);
-        item.setAttribute("aria-pressed", String(active));
-      });
-      loadStockHistory(activePeriod);
-    });
-  });
-}
-
-function bindAssetTypePicker() {
-  const picker = document.getElementById("stockAssetType");
-  if (!picker || picker.dataset.bound) return;
-  picker.dataset.bound = "true";
-  picker.addEventListener("change", function () {
-    activeAssetType = picker.value;
-    loadStockDetails();
-  });
 }
 
 async function loadStockHistory(period) {
